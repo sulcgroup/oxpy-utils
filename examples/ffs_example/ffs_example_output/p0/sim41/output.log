@@ -1,0 +1,52 @@
+INFO: seeding the RNG with 1768195450
+INFO: Initializing backend 
+INFO: Simulation type: FFS_MD
+INFO: The generator will try to take into account bonded interactions by choosing distances between bonded neighbours no larger than 2.000000
+INFO: Using 'oxDNA2_sequence_dependent_parameters.txt' as the input for sequence-dependent values
+INFO: Converting temperature from Celsius (70.000000 C°) to simulation units (0.114383)
+INFO: Running Debye-Huckel at salt concentration =  1
+INFO: Using different widths for major and minor grooves
+INFO: Temperature change detected (new temperature: 70.00 C, 343.15 K), re-initialising the DNA interaction
+DEBUG: Debye-Huckel parameters: Q=0.054300, lambda_0=0.361646, lambda=0.386780, r_high=1.160341, cutoff=2.703309
+DEBUG: Debye-Huckel parameters: debye_huckel_RC=1.740512e+00, debye_huckel_B=6.921804e-03
+INFO: The Debye length at this temperature and salt concentration is 0.386780
+INFO: pid: 22108
+DEBUG: Debye-Huckel parameters: Q=0.054300, lambda_0=0.361646, lambda=0.386780, r_high=1.160341, cutoff=2.703309
+DEBUG: Debye-Huckel parameters: debye_huckel_RC=1.740512e+00, debye_huckel_B=6.921804e-03
+INFO: The Debye length at this temperature and salt concentration is 0.386780
+INFO: (Cells.cpp) N_cells_side: 4, 4, 4; rcut=2.80331, IS_MC: 0
+INFO: N: 16, N molecules: 2
+INFO: Parsing order parameter file op.txt
+INFO: Order parameter type bond found, processing
+INFO: --> Adding HB pair (0, 15) to order parameter `native'
+INFO: --> Adding HB pair (1, 14) to order parameter `native'
+INFO: --> Adding HB pair (2, 13) to order parameter `native'
+INFO: --> Adding HB pair (3, 12) to order parameter `native'
+INFO: --> Adding HB pair (4, 11) to order parameter `native'
+INFO: --> Adding HB pair (5, 10) to order parameter `native'
+INFO: --> Adding HB pair (6, 9) to order parameter `native'
+INFO: --> Adding HB pair (7, 8) to order parameter `native'
+INFO:  File op.txt parsed; found 1 hb_dim, 0 dist_dim
+INFO: Setting initial value for the order parameter...
+INFO: Reached condition1
+INFO: Reached stop conditions, stopping in step 5218
+INFO: FFS final values: native: 8; 
+
+INFO: Total Running Time: 0.093279 s, per step: 0.0299259 ms
+INFO: Timings, in seconds, by Timer (total, own, spent in children)
+> SimBackend                          0.093 (100.0%)        0.005 (  5.8%)        0.088 ( 94.2%)
+***> Lists                            0.001 (  1.6%)        0.001 (  1.6%)        0.000 (  0.0%)
+***> Thermostat                       0.001 (  1.0%)        0.001 (  1.0%)        0.000 (  0.0%)
+***> Forces                           0.080 ( 85.6%)        0.080 ( 85.6%)        0.000 (  0.0%)
+***> First Step                       0.004 (  4.0%)        0.004 (  4.0%)        0.000 (  0.0%)
+***> Observables                      0.002 (  2.0%)        0.002 (  2.0%)        0.000 (  0.0%)
+
+INFO: Lists updated 177 times (every ~17.610169 steps)
+INFO: Aggregated I/O statistics (set debug=1 for file-wise information)
+	  4.353 KB written to files
+	  0.000  B written to stdout/stderr
+	For a total of   0.0456 MB/s
+
+
+Please cite at least the following publication for any work that uses the oxDNA simulation package
+  * E. Poppleton et al., J. Open Source Softw. 8, 4693 (2023), DOI: 10.21105/joss.04693

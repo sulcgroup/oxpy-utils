@@ -1,0 +1,7 @@
+action = stop_or
+condition1 = {
+native > 7
+}
+condition2 = {
+distance > 5.0
+}

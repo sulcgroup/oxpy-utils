@@ -1,0 +1,59 @@
+           0  -1.300809   0.000  0.000  0.000   7 0.000000
+        1000  -1.300809   0.000  0.000  0.000   7 0.000000
+        2000  -1.300809   0.000  0.000  0.000   7 0.000000
+        3000  -1.300809   0.000  0.000  0.000   7 0.000000
+        4000  -1.300809   0.000  0.000  0.000   7 0.000000
+        5000  -1.300809   0.000  0.000  0.000   7 0.000000
+        6000  -1.300809   0.000  0.000  0.000   7 0.000000
+        7000  -1.300809   0.000  0.000  0.000   7 0.000000
+        8000  -1.300809   0.000  0.000  0.000   7 0.000000
+        9000  -1.300809   0.000  0.000  0.000   7 0.000000
+       10000  -1.300809   0.000  0.000  0.000   7 0.000000
+INFO: seeding the RNG with 2235
+INFO: Initializing backend 
+INFO: Simulation type: VMMC
+INFO: The generator will try to take into account bonded interactions by choosing distances between bonded neighbours no larger than 2.000000
+INFO: Converting temperature from Celsius (40.000000 C°) to simulation units (0.104383)
+INFO: Using different widths for major and minor grooves
+INFO: Using maxclust = 12
+INFO: Using algorithm N^2 for small system
+INFO: (VMMC_CPUBackend.cpp) Extrapolating to temperatures .... 34C, 36C, 38C, 40C, 42C, 44C, 46C, 48C, 50C, 52C, 54C, 56C, 58C, 60C, 62C, 64C, 66C, 68C, 70C
+INFO: Extrapolating to temperatures [in S. U.] 0.102383 0.10305 0.103717 0.104383 0.10505 0.105717 0.106383 0.10705 0.107717 0.108383 0.10905 0.109717 0.110383 0.11105 0.111717 0.112383 0.11305 0.113717 0.114383 
+INFO: pid: 12267
+DEBUG: Debye-Huckel parameters: Q=0.054300, lambda_0=0.361646, lambda=0.369487, r_high=1.108460, cutoff=2.625487
+DEBUG: Debye-Huckel parameters: debye_huckel_RC=1.662690e+00, debye_huckel_B=7.939930e-03
+INFO: The Debye length at this temperature (0.104383) and salt concentration (1.000000) is 0.369487
+INFO: (Cells.cpp) N_cells_side: 4, 4, 4; rcut=4.62549, IS_MC: 1
+INFO: N: 16, N molecules: 2
+INFO: Parsing order parameter file op.txt
+INFO: Order parameter type bond found, processing
+INFO: --> Adding HB pair (0, 15) to order parameter `native'
+INFO: --> Adding HB pair (1, 14) to order parameter `native'
+INFO: --> Adding HB pair (2, 13) to order parameter `native'
+INFO: --> Adding HB pair (3, 12) to order parameter `native'
+INFO: --> Adding HB pair (4, 11) to order parameter `native'
+INFO: --> Adding HB pair (5, 10) to order parameter `native'
+INFO: --> Adding HB pair (6, 9) to order parameter `native'
+INFO: --> Adding HB pair (7, 8) to order parameter `native'
+INFO:  File op.txt parsed; found 1 hb_dim, 0 dist_dim
+INFO: (Weights.cpp) Weight parser: parsing `wfile.txt'
+INFO: (Weights.cpp) weights found; O.P. dim: 1, tot size: 9
+INFO: (Weights.cpp) parser: parsing done
+INFO: Not attempting to preserve topology; max_move_size = 9.54903
+
+INFO: Total Running Time: 1.58229 s, per step: 0.158229 ms
+INFO: Timings, in seconds, by Timer (total, own, spent in children)
+> SimBackend                          1.582 (100.0%)        0.008 (  0.5%)        1.574 ( 99.5%)
+***> Rotations+Translations           1.568 ( 99.1%)        1.568 ( 99.1%)        0.000 (  0.0%)
+***> Observables                      0.007 (  0.4%)        0.007 (  0.4%)        0.000 (  0.0%)
+> Lists                               0.000 (  0.0%)        0.000 (  0.0%)        0.000 (  0.0%)
+
+INFO: Aggregated I/O statistics (set debug=1 for file-wise information)
+	 92.922 KB written to files
+	649.000  B written to stdout/stderr
+	For a total of   0.0577 MB/s
+
+
+Please cite at least the following publication for any work that uses the oxDNA simulation package
+  * E. Poppleton et al., J. Open Source Softw. 8, 4693 (2023), DOI: 10.21105/joss.04693
+Run time: 1.6642875909999475

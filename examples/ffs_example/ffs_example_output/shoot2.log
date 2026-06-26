@@ -1,0 +1,774 @@
+2026-01-11 22:22:28,475 [INFO] (main) Starting shoot2 procedure
+2026-01-11 22:22:28,478 [INFO] (main) Found 12 starting confs
+2026-01-11 22:22:28,488 [INFO] (main) starting processes...
+2026-01-11 22:22:28,519 [INFO] (main) waiting for processes to finish
+2026-01-11 22:22:28,596 [INFO] (timer) Timer started at Sun Jan 11 22:22:28 2026
+2026-01-11 22:22:28,606 [INFO] (Worker0) Worker 0 started
+2026-01-11 22:22:28,607 [INFO] (Worker0) Chose starting configuration success_10.dat
+2026-01-11 22:22:28,620 [INFO] (Worker1) Worker 1 started
+2026-01-11 22:22:28,622 [INFO] (Worker1) Chose starting configuration success_6.dat
+2026-01-11 22:22:28,624 [INFO] (Worker2) Worker 2 started
+2026-01-11 22:22:28,625 [INFO] (Worker3) Worker 3 started
+2026-01-11 22:22:28,637 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:28,626 [INFO] (Worker2) Chose starting configuration success_6.dat
+2026-01-11 22:22:28,628 [INFO] (Worker3) Chose starting configuration success_6.dat
+2026-01-11 22:22:28,655 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:28,660 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:28,679 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:28,799 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:28,799 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195338
+2026-01-11 22:22:28,800 [INFO] (Worker3) Chose starting configuration success_8.dat
+2026-01-11 22:22:28,837 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:28,838 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:28,839 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195337
+2026-01-11 22:22:28,838 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195336
+2026-01-11 22:22:28,839 [INFO] (Worker1) Chose starting configuration success_9.dat
+2026-01-11 22:22:28,839 [INFO] (Worker2) Chose starting configuration success_8.dat
+2026-01-11 22:22:28,842 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:28,845 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:28,846 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195335
+2026-01-11 22:22:28,846 [INFO] (Worker0) Chose starting configuration success_8.dat
+2026-01-11 22:22:28,859 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:28,861 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:28,876 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:28,937 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:28,938 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195341
+2026-01-11 22:22:28,938 [INFO] (Worker2) Chose starting configuration success_11.dat
+2026-01-11 22:22:28,962 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:29,083 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:29,084 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195343
+2026-01-11 22:22:29,084 [INFO] (Worker2) Chose starting configuration success_1.dat
+2026-01-11 22:22:29,124 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:29,136 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:29,136 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195342
+2026-01-11 22:22:29,136 [INFO] (Worker0) Chose starting configuration success_9.dat
+2026-01-11 22:22:29,176 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:29,185 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:29,186 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195339
+2026-01-11 22:22:29,186 [INFO] (Worker3) Chose starting configuration success_6.dat
+2026-01-11 22:22:29,213 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:29,382 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:29,383 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195344
+2026-01-11 22:22:29,383 [INFO] (Worker2) Chose starting configuration success_11.dat
+2026-01-11 22:22:29,402 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:29,402 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195346
+2026-01-11 22:22:29,402 [INFO] (Worker3) Chose starting configuration success_8.dat
+2026-01-11 22:22:29,409 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:29,415 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:29,502 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:29,503 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195348
+2026-01-11 22:22:29,503 [INFO] (Worker3) Chose starting configuration success_12.dat
+2026-01-11 22:22:29,526 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:29,709 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:29,709 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195347
+2026-01-11 22:22:29,709 [INFO] (Worker2) Chose starting configuration success_1.dat
+2026-01-11 22:22:29,735 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:29,813 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:29,814 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195349
+2026-01-11 22:22:29,814 [INFO] (Worker3) Chose starting configuration success_9.dat
+2026-01-11 22:22:29,842 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:29,929 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:29,930 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195351
+2026-01-11 22:22:29,930 [INFO] (Worker3) Chose starting configuration success_11.dat
+2026-01-11 22:22:29,953 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:30,026 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,026 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195350
+2026-01-11 22:22:30,026 [INFO] (Worker2) Chose starting configuration success_4.dat
+2026-01-11 22:22:30,039 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:30,093 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,094 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195352
+2026-01-11 22:22:30,094 [INFO] (Worker3) Chose starting configuration success_4.dat
+2026-01-11 22:22:30,099 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,100 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195353
+2026-01-11 22:22:30,100 [INFO] (Worker2) Chose starting configuration success_6.dat
+2026-01-11 22:22:30,106 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:30,112 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:30,124 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,125 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195354
+2026-01-11 22:22:30,125 [INFO] (Worker3) Chose starting configuration success_10.dat
+2026-01-11 22:22:30,138 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:30,172 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,172 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195355
+2026-01-11 22:22:30,172 [INFO] (Worker2) Chose starting configuration success_10.dat
+2026-01-11 22:22:30,185 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:30,235 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,235 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195357
+2026-01-11 22:22:30,235 [INFO] (Worker2) Chose starting configuration success_7.dat
+2026-01-11 22:22:30,247 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:30,255 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,255 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195356
+2026-01-11 22:22:30,255 [INFO] (Worker3) Chose starting configuration success_3.dat
+2026-01-11 22:22:30,267 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:30,334 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,335 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195358
+2026-01-11 22:22:30,335 [INFO] (Worker2) Chose starting configuration success_6.dat
+2026-01-11 22:22:30,347 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:30,405 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,405 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195360
+2026-01-11 22:22:30,405 [INFO] (Worker2) Chose starting configuration success_8.dat
+2026-01-11 22:22:30,417 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:30,471 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,472 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195361
+2026-01-11 22:22:30,472 [INFO] (Worker2) Chose starting configuration success_8.dat
+2026-01-11 22:22:30,484 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:30,573 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,574 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195362
+2026-01-11 22:22:30,574 [INFO] (Worker2) Chose starting configuration success_4.dat
+2026-01-11 22:22:30,586 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:30,656 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,656 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195363
+2026-01-11 22:22:30,656 [INFO] (Worker2) Chose starting configuration success_5.dat
+2026-01-11 22:22:30,669 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:30,730 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:30,730 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195364
+2026-01-11 22:22:30,730 [INFO] (Worker2) Chose starting configuration success_1.dat
+2026-01-11 22:22:30,742 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:31,472 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:31,473 [INFO] (Worker0) SUCCESS: starting from conf_index 8 and seed 1768195345
+2026-01-11 22:22:31,473 [INFO] (Worker0) Chose starting configuration success_10.dat
+2026-01-11 22:22:31,489 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:31,538 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:31,538 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195366
+2026-01-11 22:22:31,538 [INFO] (Worker0) Chose starting configuration success_3.dat
+2026-01-11 22:22:31,550 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:31,661 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:31,661 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195367
+2026-01-11 22:22:31,662 [INFO] (Worker0) Chose starting configuration success_9.dat
+2026-01-11 22:22:31,678 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:31,722 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:31,723 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195368
+2026-01-11 22:22:31,723 [INFO] (Worker0) Chose starting configuration success_6.dat
+2026-01-11 22:22:31,735 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:31,792 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:31,792 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195369
+2026-01-11 22:22:31,793 [INFO] (Worker0) Chose starting configuration success_5.dat
+2026-01-11 22:22:31,805 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:31,871 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:31,871 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195370
+2026-01-11 22:22:31,872 [INFO] (Worker0) Chose starting configuration success_9.dat
+2026-01-11 22:22:31,884 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:31,966 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:31,967 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195371
+2026-01-11 22:22:31,967 [INFO] (Worker0) Chose starting configuration success_10.dat
+2026-01-11 22:22:31,979 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:32,114 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:32,114 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195372
+2026-01-11 22:22:32,114 [INFO] (Worker0) Chose starting configuration success_10.dat
+2026-01-11 22:22:32,130 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:32,187 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:32,187 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195373
+2026-01-11 22:22:32,187 [INFO] (Worker0) Chose starting configuration success_1.dat
+2026-01-11 22:22:32,199 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:32,528 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:32,529 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195374
+2026-01-11 22:22:32,529 [INFO] (Worker0) Chose starting configuration success_12.dat
+2026-01-11 22:22:32,545 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:32,616 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:32,616 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195375
+2026-01-11 22:22:32,616 [INFO] (Worker0) Chose starting configuration success_11.dat
+2026-01-11 22:22:32,629 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:32,872 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:32,873 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195365
+2026-01-11 22:22:32,873 [INFO] (Worker2) Chose starting configuration success_7.dat
+2026-01-11 22:22:32,899 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:32,991 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:32,991 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195377
+2026-01-11 22:22:32,991 [INFO] (Worker2) Chose starting configuration success_7.dat
+2026-01-11 22:22:33,017 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:33,108 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:33,108 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195378
+2026-01-11 22:22:33,109 [INFO] (Worker2) Chose starting configuration success_1.dat
+2026-01-11 22:22:33,134 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:34,255 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:34,256 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195359
+2026-01-11 22:22:34,256 [INFO] (Worker3) Chose starting configuration success_12.dat
+2026-01-11 22:22:34,272 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:34,511 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:34,512 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195380
+2026-01-11 22:22:34,512 [INFO] (Worker3) Chose starting configuration success_10.dat
+2026-01-11 22:22:34,528 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:34,636 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:34,637 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195381
+2026-01-11 22:22:34,637 [INFO] (Worker3) Chose starting configuration success_8.dat
+2026-01-11 22:22:34,653 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:34,675 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:34,675 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195382
+2026-01-11 22:22:34,676 [INFO] (Worker3) Chose starting configuration success_3.dat
+2026-01-11 22:22:34,687 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:34,747 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:34,748 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195383
+2026-01-11 22:22:34,748 [INFO] (Worker3) Chose starting configuration success_5.dat
+2026-01-11 22:22:34,762 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:34,833 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:34,833 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195384
+2026-01-11 22:22:34,833 [INFO] (Worker3) Chose starting configuration success_6.dat
+2026-01-11 22:22:34,845 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:35,042 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:35,042 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195385
+2026-01-11 22:22:35,043 [INFO] (Worker3) Chose starting configuration success_1.dat
+2026-01-11 22:22:35,059 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:35,176 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:35,176 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195386
+2026-01-11 22:22:35,177 [INFO] (Worker3) Chose starting configuration success_10.dat
+2026-01-11 22:22:35,192 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:35,322 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:35,322 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195387
+2026-01-11 22:22:35,322 [INFO] (Worker3) Chose starting configuration success_3.dat
+2026-01-11 22:22:35,334 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:35,369 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:35,370 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195388
+2026-01-11 22:22:35,370 [INFO] (Worker3) Chose starting configuration success_1.dat
+2026-01-11 22:22:35,382 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:36,790 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:36,790 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195340
+2026-01-11 22:22:36,790 [INFO] (Worker1) Chose starting configuration success_2.dat
+2026-01-11 22:22:36,806 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:36,909 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:36,910 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195390
+2026-01-11 22:22:36,910 [INFO] (Worker1) Chose starting configuration success_8.dat
+2026-01-11 22:22:36,922 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:36,981 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:36,982 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195391
+2026-01-11 22:22:36,982 [INFO] (Worker1) Chose starting configuration success_11.dat
+2026-01-11 22:22:36,994 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:37,061 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:37,062 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195392
+2026-01-11 22:22:37,062 [INFO] (Worker1) Chose starting configuration success_1.dat
+2026-01-11 22:22:37,074 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:37,334 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:37,335 [INFO] (Worker0) SUCCESS: starting from conf_index 10 and seed 1768195376
+2026-01-11 22:22:37,335 [INFO] (Worker0) Chose starting configuration success_10.dat
+2026-01-11 22:22:37,352 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:37,418 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:37,418 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195394
+2026-01-11 22:22:37,418 [INFO] (Worker0) Chose starting configuration success_1.dat
+2026-01-11 22:22:37,430 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:38,597 [INFO] (timer) runtime 10.00s: successes: 2, time per success: 5.000s
+2026-01-11 22:22:38,904 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:38,904 [INFO] (Worker2) SUCCESS: starting from conf_index 0 and seed 1768195379
+2026-01-11 22:22:38,905 [INFO] (Worker2) Chose starting configuration success_10.dat
+2026-01-11 22:22:38,922 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:39,040 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:39,041 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195396
+2026-01-11 22:22:39,041 [INFO] (Worker2) Chose starting configuration success_6.dat
+2026-01-11 22:22:39,056 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:39,117 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:39,118 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195397
+2026-01-11 22:22:39,118 [INFO] (Worker2) Chose starting configuration success_8.dat
+2026-01-11 22:22:39,130 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:39,177 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:39,178 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195398
+2026-01-11 22:22:39,178 [INFO] (Worker2) Chose starting configuration success_11.dat
+2026-01-11 22:22:39,190 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:39,391 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:39,392 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195399
+2026-01-11 22:22:39,392 [INFO] (Worker2) Chose starting configuration success_12.dat
+2026-01-11 22:22:39,408 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:39,524 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:39,525 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195400
+2026-01-11 22:22:39,525 [INFO] (Worker2) Chose starting configuration success_12.dat
+2026-01-11 22:22:39,541 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:39,624 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:39,624 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195401
+2026-01-11 22:22:39,625 [INFO] (Worker2) Chose starting configuration success_10.dat
+2026-01-11 22:22:39,637 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:39,697 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:39,697 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195402
+2026-01-11 22:22:39,697 [INFO] (Worker2) Chose starting configuration success_1.dat
+2026-01-11 22:22:39,709 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:40,660 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:40,661 [INFO] (Worker3) SUCCESS: starting from conf_index 0 and seed 1768195389
+2026-01-11 22:22:40,661 [INFO] (Worker3) Chose starting configuration success_1.dat
+2026-01-11 22:22:40,677 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:41,822 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:41,823 [INFO] (Worker0) SUCCESS: starting from conf_index 0 and seed 1768195395
+2026-01-11 22:22:41,823 [INFO] (Worker0) Chose starting configuration success_10.dat
+2026-01-11 22:22:41,840 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:41,952 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:41,952 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195405
+2026-01-11 22:22:41,952 [INFO] (Worker0) Chose starting configuration success_1.dat
+2026-01-11 22:22:41,964 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:42,548 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:42,549 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195406
+2026-01-11 22:22:42,549 [INFO] (Worker0) Chose starting configuration success_8.dat
+2026-01-11 22:22:42,565 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:42,614 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:42,615 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195407
+2026-01-11 22:22:42,615 [INFO] (Worker0) Chose starting configuration success_9.dat
+2026-01-11 22:22:42,627 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:42,709 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:42,710 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195408
+2026-01-11 22:22:42,710 [INFO] (Worker0) Chose starting configuration success_6.dat
+2026-01-11 22:22:42,721 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:42,826 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:42,827 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195409
+2026-01-11 22:22:42,827 [INFO] (Worker0) Chose starting configuration success_2.dat
+2026-01-11 22:22:42,843 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:42,945 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:42,945 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195410
+2026-01-11 22:22:42,945 [INFO] (Worker0) Chose starting configuration success_11.dat
+2026-01-11 22:22:42,971 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:43,091 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:43,092 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195411
+2026-01-11 22:22:43,093 [INFO] (Worker0) Chose starting configuration success_2.dat
+2026-01-11 22:22:43,118 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:43,254 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:43,254 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195412
+2026-01-11 22:22:43,255 [INFO] (Worker0) Chose starting configuration success_12.dat
+2026-01-11 22:22:43,277 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:43,437 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:43,437 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195413
+2026-01-11 22:22:43,437 [INFO] (Worker0) Chose starting configuration success_2.dat
+2026-01-11 22:22:43,450 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:43,561 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:43,561 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195414
+2026-01-11 22:22:43,561 [INFO] (Worker0) Chose starting configuration success_10.dat
+2026-01-11 22:22:43,578 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:43,790 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:43,791 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195415
+2026-01-11 22:22:43,791 [INFO] (Worker0) Chose starting configuration success_11.dat
+2026-01-11 22:22:43,828 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:43,871 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:43,873 [INFO] (Worker1) SUCCESS: starting from conf_index 0 and seed 1768195393
+2026-01-11 22:22:43,873 [INFO] (Worker1) Chose starting configuration success_7.dat
+2026-01-11 22:22:43,916 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:43,960 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:43,961 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195416
+2026-01-11 22:22:43,961 [INFO] (Worker0) Chose starting configuration success_4.dat
+2026-01-11 22:22:43,984 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:44,070 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:44,071 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195417
+2026-01-11 22:22:44,071 [INFO] (Worker1) Chose starting configuration success_5.dat
+2026-01-11 22:22:44,095 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:44,236 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:44,237 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195418
+2026-01-11 22:22:44,237 [INFO] (Worker0) Chose starting configuration success_11.dat
+2026-01-11 22:22:44,239 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:44,240 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195419
+2026-01-11 22:22:44,240 [INFO] (Worker1) Chose starting configuration success_10.dat
+2026-01-11 22:22:44,267 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:44,283 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:44,412 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:44,413 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195404
+2026-01-11 22:22:44,413 [INFO] (Worker3) Chose starting configuration success_7.dat
+2026-01-11 22:22:44,438 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:44,439 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195420
+2026-01-11 22:22:44,439 [INFO] (Worker0) Chose starting configuration success_4.dat
+2026-01-11 22:22:44,465 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:44,473 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:44,561 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:44,562 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195421
+2026-01-11 22:22:44,562 [INFO] (Worker1) Chose starting configuration success_1.dat
+2026-01-11 22:22:44,583 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:44,740 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:44,741 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195422
+2026-01-11 22:22:44,741 [INFO] (Worker3) Chose starting configuration success_9.dat
+2026-01-11 22:22:44,765 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:45,094 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:45,095 [INFO] (Worker2) SUCCESS: starting from conf_index 0 and seed 1768195403
+2026-01-11 22:22:45,095 [INFO] (Worker2) Chose starting configuration success_5.dat
+2026-01-11 22:22:45,117 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:45,177 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:45,177 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195426
+2026-01-11 22:22:45,177 [INFO] (Worker2) Chose starting configuration success_9.dat
+2026-01-11 22:22:45,189 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:45,237 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:45,237 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195427
+2026-01-11 22:22:45,237 [INFO] (Worker2) Chose starting configuration success_1.dat
+2026-01-11 22:22:45,249 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:45,698 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:45,698 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195423
+2026-01-11 22:22:45,699 [INFO] (Worker0) Chose starting configuration success_8.dat
+2026-01-11 22:22:45,715 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:45,785 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:45,785 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195429
+2026-01-11 22:22:45,785 [INFO] (Worker0) Chose starting configuration success_1.dat
+2026-01-11 22:22:45,797 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:45,928 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:45,929 [INFO] (Worker0) SUCCESS: starting from conf_index 0 and seed 1768195430
+2026-01-11 22:22:45,929 [INFO] (Worker0) Chose starting configuration success_5.dat
+2026-01-11 22:22:45,948 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:46,041 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,041 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195431
+2026-01-11 22:22:46,041 [INFO] (Worker0) Chose starting configuration success_11.dat
+2026-01-11 22:22:46,054 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:46,079 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,080 [INFO] (Worker2) SUCCESS: starting from conf_index 0 and seed 1768195428
+2026-01-11 22:22:46,080 [INFO] (Worker2) Chose starting configuration success_4.dat
+2026-01-11 22:22:46,092 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:46,098 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,098 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195432
+2026-01-11 22:22:46,098 [INFO] (Worker0) Chose starting configuration success_2.dat
+2026-01-11 22:22:46,110 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:46,141 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,141 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195433
+2026-01-11 22:22:46,142 [INFO] (Worker2) Chose starting configuration success_6.dat
+2026-01-11 22:22:46,154 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:46,185 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,185 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195434
+2026-01-11 22:22:46,185 [INFO] (Worker0) Chose starting configuration success_6.dat
+2026-01-11 22:22:46,198 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:46,215 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,216 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195435
+2026-01-11 22:22:46,216 [INFO] (Worker2) Chose starting configuration success_9.dat
+2026-01-11 22:22:46,229 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:46,261 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,261 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195436
+2026-01-11 22:22:46,261 [INFO] (Worker0) Chose starting configuration success_11.dat
+2026-01-11 22:22:46,273 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:46,283 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,283 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195437
+2026-01-11 22:22:46,283 [INFO] (Worker2) Chose starting configuration success_2.dat
+2026-01-11 22:22:46,295 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:46,343 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,344 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195438
+2026-01-11 22:22:46,344 [INFO] (Worker0) Chose starting configuration success_5.dat
+2026-01-11 22:22:46,356 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:46,372 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,372 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195439
+2026-01-11 22:22:46,373 [INFO] (Worker2) Chose starting configuration success_2.dat
+2026-01-11 22:22:46,385 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:46,494 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,494 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195440
+2026-01-11 22:22:46,494 [INFO] (Worker0) Chose starting configuration success_2.dat
+2026-01-11 22:22:46,514 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:46,535 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,535 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195441
+2026-01-11 22:22:46,536 [INFO] (Worker2) Chose starting configuration success_9.dat
+2026-01-11 22:22:46,548 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:46,645 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,645 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195443
+2026-01-11 22:22:46,645 [INFO] (Worker2) Chose starting configuration success_7.dat
+2026-01-11 22:22:46,662 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:46,699 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,699 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195442
+2026-01-11 22:22:46,699 [INFO] (Worker0) Chose starting configuration success_3.dat
+2026-01-11 22:22:46,711 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:46,728 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,728 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195444
+2026-01-11 22:22:46,728 [INFO] (Worker2) Chose starting configuration success_2.dat
+2026-01-11 22:22:46,740 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:46,755 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,755 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195424
+2026-01-11 22:22:46,756 [INFO] (Worker1) Chose starting configuration success_4.dat
+2026-01-11 22:22:46,768 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:46,809 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,810 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195446
+2026-01-11 22:22:46,810 [INFO] (Worker2) Chose starting configuration success_12.dat
+2026-01-11 22:22:46,822 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:46,826 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,827 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195447
+2026-01-11 22:22:46,827 [INFO] (Worker1) Chose starting configuration success_10.dat
+2026-01-11 22:22:46,840 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:46,889 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,890 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195445
+2026-01-11 22:22:46,890 [INFO] (Worker0) Chose starting configuration success_3.dat
+2026-01-11 22:22:46,902 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:46,933 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:46,933 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195448
+2026-01-11 22:22:46,933 [INFO] (Worker2) Chose starting configuration success_12.dat
+2026-01-11 22:22:46,946 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:47,007 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,007 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195449
+2026-01-11 22:22:47,007 [INFO] (Worker1) Chose starting configuration success_2.dat
+2026-01-11 22:22:47,009 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,009 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195450
+2026-01-11 22:22:47,010 [INFO] (Worker0) Chose starting configuration success_5.dat
+2026-01-11 22:22:47,020 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:47,021 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:47,098 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,099 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195452
+2026-01-11 22:22:47,099 [INFO] (Worker1) Chose starting configuration success_1.dat
+2026-01-11 22:22:47,111 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:47,119 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,120 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195453
+2026-01-11 22:22:47,120 [INFO] (Worker0) Chose starting configuration success_11.dat
+2026-01-11 22:22:47,137 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:47,170 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,170 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195455
+2026-01-11 22:22:47,170 [INFO] (Worker0) Chose starting configuration success_5.dat
+2026-01-11 22:22:47,181 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:47,246 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,246 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195456
+2026-01-11 22:22:47,246 [INFO] (Worker0) Chose starting configuration success_1.dat
+2026-01-11 22:22:47,259 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:47,458 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,459 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195425
+2026-01-11 22:22:47,459 [INFO] (Worker3) Chose starting configuration success_5.dat
+2026-01-11 22:22:47,476 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:47,523 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,523 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195458
+2026-01-11 22:22:47,523 [INFO] (Worker3) Chose starting configuration success_8.dat
+2026-01-11 22:22:47,536 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:47,579 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,579 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195459
+2026-01-11 22:22:47,579 [INFO] (Worker3) Chose starting configuration success_10.dat
+2026-01-11 22:22:47,592 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:47,729 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,730 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195460
+2026-01-11 22:22:47,730 [INFO] (Worker3) Chose starting configuration success_7.dat
+2026-01-11 22:22:47,747 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:47,763 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,764 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195457
+2026-01-11 22:22:47,764 [INFO] (Worker0) Chose starting configuration success_8.dat
+2026-01-11 22:22:47,776 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:47,805 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,805 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195461
+2026-01-11 22:22:47,805 [INFO] (Worker3) Chose starting configuration success_12.dat
+2026-01-11 22:22:47,817 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:47,846 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,846 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195463
+2026-01-11 22:22:47,846 [INFO] (Worker3) Chose starting configuration success_6.dat
+2026-01-11 22:22:47,858 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:47,871 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,871 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195462
+2026-01-11 22:22:47,871 [INFO] (Worker0) Chose starting configuration success_3.dat
+2026-01-11 22:22:47,883 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:47,959 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,959 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195464
+2026-01-11 22:22:47,959 [INFO] (Worker3) Chose starting configuration success_11.dat
+2026-01-11 22:22:47,972 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:47,991 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:47,991 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195465
+2026-01-11 22:22:47,991 [INFO] (Worker0) Chose starting configuration success_9.dat
+2026-01-11 22:22:48,003 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:48,041 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,042 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195467
+2026-01-11 22:22:48,042 [INFO] (Worker0) Chose starting configuration success_5.dat
+2026-01-11 22:22:48,054 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:48,072 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,073 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195466
+2026-01-11 22:22:48,073 [INFO] (Worker3) Chose starting configuration success_4.dat
+2026-01-11 22:22:48,089 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:48,111 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,112 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195468
+2026-01-11 22:22:48,112 [INFO] (Worker0) Chose starting configuration success_2.dat
+2026-01-11 22:22:48,124 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:48,140 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,141 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195469
+2026-01-11 22:22:48,141 [INFO] (Worker3) Chose starting configuration success_10.dat
+2026-01-11 22:22:48,153 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:48,189 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,190 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195470
+2026-01-11 22:22:48,190 [INFO] (Worker0) Chose starting configuration success_12.dat
+2026-01-11 22:22:48,202 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:48,232 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,233 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195472
+2026-01-11 22:22:48,233 [INFO] (Worker0) Chose starting configuration success_1.dat
+2026-01-11 22:22:48,245 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:48,274 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,275 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195471
+2026-01-11 22:22:48,275 [INFO] (Worker3) Chose starting configuration success_11.dat
+2026-01-11 22:22:48,287 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:48,363 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,364 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195451
+2026-01-11 22:22:48,364 [INFO] (Worker2) Chose starting configuration success_5.dat
+2026-01-11 22:22:48,375 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,375 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195474
+2026-01-11 22:22:48,375 [INFO] (Worker3) Chose starting configuration success_4.dat
+2026-01-11 22:22:48,376 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:48,387 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:48,432 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,433 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195473
+2026-01-11 22:22:48,433 [INFO] (Worker0) Chose starting configuration success_4.dat
+2026-01-11 22:22:48,439 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,440 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195475
+2026-01-11 22:22:48,440 [INFO] (Worker2) Chose starting configuration success_12.dat
+2026-01-11 22:22:48,446 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:48,453 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:48,459 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,459 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195476
+2026-01-11 22:22:48,460 [INFO] (Worker3) Chose starting configuration success_3.dat
+2026-01-11 22:22:48,474 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:48,511 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,512 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195479
+2026-01-11 22:22:48,512 [INFO] (Worker3) Chose starting configuration success_7.dat
+2026-01-11 22:22:48,524 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:48,550 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,551 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195477
+2026-01-11 22:22:48,551 [INFO] (Worker0) Chose starting configuration success_10.dat
+2026-01-11 22:22:48,563 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:48,597 [INFO] (timer) runtime 20.00s: successes: 9, time per success: 2.222s
+2026-01-11 22:22:48,623 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,624 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195480
+2026-01-11 22:22:48,624 [INFO] (Worker3) Chose starting configuration success_2.dat
+2026-01-11 22:22:48,636 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:48,638 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,639 [INFO] (Worker2) FAILURE: starting from conf_index 2 and seed 1768195478
+2026-01-11 22:22:48,639 [INFO] (Worker2) Chose starting configuration success_1.dat
+2026-01-11 22:22:48,652 [INFO] (Worker2) Executing shoot....
+2026-01-11 22:22:48,670 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,670 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195481
+2026-01-11 22:22:48,670 [INFO] (Worker0) Chose starting configuration success_8.dat
+2026-01-11 22:22:48,683 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:48,696 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,696 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195482
+2026-01-11 22:22:48,696 [INFO] (Worker3) Chose starting configuration success_7.dat
+2026-01-11 22:22:48,708 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:48,753 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,754 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195484
+2026-01-11 22:22:48,754 [INFO] (Worker0) Chose starting configuration success_3.dat
+2026-01-11 22:22:48,757 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,757 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195485
+2026-01-11 22:22:48,757 [INFO] (Worker3) Chose starting configuration success_9.dat
+2026-01-11 22:22:48,766 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:48,769 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:48,800 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,800 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195486
+2026-01-11 22:22:48,801 [INFO] (Worker0) Chose starting configuration success_4.dat
+2026-01-11 22:22:48,812 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:48,852 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,853 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195487
+2026-01-11 22:22:48,853 [INFO] (Worker3) Chose starting configuration success_10.dat
+2026-01-11 22:22:48,865 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:48,927 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:48,927 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195489
+2026-01-11 22:22:48,927 [INFO] (Worker3) Chose starting configuration success_11.dat
+2026-01-11 22:22:48,940 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:49,036 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:49,036 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195490
+2026-01-11 22:22:49,036 [INFO] (Worker3) Chose starting configuration success_9.dat
+2026-01-11 22:22:49,052 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:49,104 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:49,105 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195491
+2026-01-11 22:22:49,105 [INFO] (Worker3) Chose starting configuration success_6.dat
+2026-01-11 22:22:49,118 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:49,178 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:49,179 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195492
+2026-01-11 22:22:49,179 [INFO] (Worker3) Chose starting configuration success_1.dat
+2026-01-11 22:22:49,191 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:50,175 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:50,175 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195488
+2026-01-11 22:22:50,175 [INFO] (Worker0) Chose starting configuration success_8.dat
+2026-01-11 22:22:50,191 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:50,234 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:50,235 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195494
+2026-01-11 22:22:50,235 [INFO] (Worker0) Chose starting configuration success_2.dat
+2026-01-11 22:22:50,247 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:50,344 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:50,345 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195495
+2026-01-11 22:22:50,345 [INFO] (Worker0) Chose starting configuration success_1.dat
+2026-01-11 22:22:50,366 [INFO] (Worker0) Executing shoot....
+2026-01-11 22:22:52,486 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:52,486 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195454
+2026-01-11 22:22:52,487 [INFO] (Worker1) Chose starting configuration success_11.dat
+2026-01-11 22:22:52,503 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:52,551 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:52,551 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195497
+2026-01-11 22:22:52,551 [INFO] (Worker1) Chose starting configuration success_12.dat
+2026-01-11 22:22:52,563 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:52,594 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:52,595 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195498
+2026-01-11 22:22:52,595 [INFO] (Worker1) Chose starting configuration success_8.dat
+2026-01-11 22:22:52,607 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:52,663 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:52,664 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195499
+2026-01-11 22:22:52,664 [INFO] (Worker1) Chose starting configuration success_3.dat
+2026-01-11 22:22:52,676 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:52,783 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:52,784 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195500
+2026-01-11 22:22:52,784 [INFO] (Worker1) Chose starting configuration success_2.dat
+2026-01-11 22:22:52,801 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:52,864 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:52,865 [INFO] (Worker3) SUCCESS: starting from conf_index 0 and seed 1768195493
+2026-01-11 22:22:52,865 [INFO] (Worker3) Chose starting configuration success_11.dat
+2026-01-11 22:22:52,877 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:52,909 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:52,910 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195501
+2026-01-11 22:22:52,910 [INFO] (Worker1) Chose starting configuration success_11.dat
+2026-01-11 22:22:52,923 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:52,977 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:52,977 [INFO] (Worker1) FAILURE: starting from conf_index 1 and seed 1768195503
+2026-01-11 22:22:52,977 [INFO] (Worker1) Chose starting configuration success_1.dat
+2026-01-11 22:22:52,989 [INFO] (Worker1) Executing shoot....
+2026-01-11 22:22:53,013 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:53,014 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195502
+2026-01-11 22:22:53,014 [INFO] (Worker3) Chose starting configuration success_2.dat
+2026-01-11 22:22:53,030 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:53,087 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:53,087 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195505
+2026-01-11 22:22:53,088 [INFO] (Worker3) Chose starting configuration success_12.dat
+2026-01-11 22:22:53,100 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:53,212 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:53,212 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195506
+2026-01-11 22:22:53,212 [INFO] (Worker3) Chose starting configuration success_11.dat
+2026-01-11 22:22:53,228 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:53,295 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:53,295 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195507
+2026-01-11 22:22:53,296 [INFO] (Worker3) Chose starting configuration success_12.dat
+2026-01-11 22:22:53,307 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:53,377 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:53,378 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195508
+2026-01-11 22:22:53,378 [INFO] (Worker3) Chose starting configuration success_3.dat
+2026-01-11 22:22:53,390 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:53,430 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:53,430 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195509
+2026-01-11 22:22:53,431 [INFO] (Worker3) Chose starting configuration success_3.dat
+2026-01-11 22:22:53,443 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:53,549 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:53,550 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195510
+2026-01-11 22:22:53,550 [INFO] (Worker3) Chose starting configuration success_1.dat
+2026-01-11 22:22:53,566 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:54,282 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:54,283 [INFO] (Worker3) SUCCESS: starting from conf_index 0 and seed 1768195511
+2026-01-11 22:22:54,283 [INFO] (Worker3) Chose starting configuration success_5.dat
+2026-01-11 22:22:54,300 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:54,344 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:54,344 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195512
+2026-01-11 22:22:54,345 [INFO] (Worker3) Chose starting configuration success_10.dat
+2026-01-11 22:22:54,357 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:54,446 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:54,447 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195513
+2026-01-11 22:22:54,447 [INFO] (Worker3) Chose starting configuration success_10.dat
+2026-01-11 22:22:54,459 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:54,528 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:54,529 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195514
+2026-01-11 22:22:54,529 [INFO] (Worker3) Chose starting configuration success_8.dat
+2026-01-11 22:22:54,541 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:54,594 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:54,595 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195515
+2026-01-11 22:22:54,595 [INFO] (Worker3) Chose starting configuration success_3.dat
+2026-01-11 22:22:54,607 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:54,641 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:54,641 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195516
+2026-01-11 22:22:54,641 [INFO] (Worker3) Chose starting configuration success_7.dat
+2026-01-11 22:22:54,653 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:54,703 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:54,704 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195517
+2026-01-11 22:22:54,704 [INFO] (Worker3) Chose starting configuration success_4.dat
+2026-01-11 22:22:54,716 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:54,754 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:54,754 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195518
+2026-01-11 22:22:54,754 [INFO] (Worker3) Chose starting configuration success_11.dat
+2026-01-11 22:22:54,767 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:54,816 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:54,816 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195519
+2026-01-11 22:22:54,816 [INFO] (Worker3) Chose starting configuration success_5.dat
+2026-01-11 22:22:54,828 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:54,880 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:54,880 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195520
+2026-01-11 22:22:54,880 [INFO] (Worker3) Chose starting configuration success_1.dat
+2026-01-11 22:22:54,892 [INFO] (Worker3) Executing shoot....
+2026-01-11 22:22:55,919 [INFO] (Worker1) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:55,920 [INFO] (Worker1) SUCCESS: starting from conf_index 0 and seed 1768195504
+2026-01-11 22:22:55,920 [INFO] (Worker1) Reached desired success count 12. Worker 1 returning
+2026-01-11 22:22:55,920 [INFO] (Worker1) [Worker 1] Alive threads at exit: ['MainThread', 'pydevd.Writer', 'pydevd.Reader', 'pydevd.CommandThread', 'pydevd.CheckAliveThread', 'QueueFeederThread', 'QueueFeederThread']
+2026-01-11 22:22:56,609 [INFO] (Worker2) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:22:56,610 [INFO] (Worker2) SUCCESS: starting from conf_index 0 and seed 1768195483
+2026-01-11 22:22:56,611 [INFO] (Worker2) Reached desired success count 12. Worker 2 returning
+2026-01-11 22:22:56,611 [INFO] (Worker2) [Worker 2] Alive threads at exit: ['MainThread', 'pydevd.Writer', 'pydevd.Reader', 'pydevd.CommandThread', 'pydevd.CheckAliveThread', 'QueueFeederThread', 'QueueFeederThread']
+2026-01-11 22:22:58,598 [INFO] (timer) runtime 30.00s: successes: 13, time per success: 2.308s
+2026-01-11 22:23:01,577 [INFO] (Worker3) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:23:01,577 [INFO] (Worker3) FAILURE: starting from conf_index 3 and seed 1768195521
+2026-01-11 22:23:01,578 [INFO] (Worker3) Reached desired success count 12. Worker 3 returning
+2026-01-11 22:23:01,578 [INFO] (Worker3) [Worker 3] Alive threads at exit: ['MainThread', 'pydevd.Writer', 'pydevd.Reader', 'pydevd.CommandThread', 'pydevd.CheckAliveThread', 'QueueFeederThread', 'QueueFeederThread']
+2026-01-11 22:23:02,551 [INFO] (Worker0) Shoot complete. Execution time: 0.0ms
+2026-01-11 22:23:02,551 [INFO] (Worker0) FAILURE: starting from conf_index 0 and seed 1768195496
+2026-01-11 22:23:02,551 [INFO] (Worker0) Reached desired success count 12. Worker 0 returning
+2026-01-11 22:23:02,551 [INFO] (Worker0) [Worker 0] Alive threads at exit: ['MainThread', 'pydevd.Writer', 'pydevd.Reader', 'pydevd.CommandThread', 'pydevd.CheckAliveThread', 'QueueFeederThread', 'QueueFeederThread']
+2026-01-11 22:23:02,880 [INFO] (main) Terminating timer
+2026-01-11 22:23:02,881 [INFO] (main) ## log of successes probabilities from each starting conf
+2026-01-11 22:23:02,886 [INFO] (main) # shoot2 SUMMARY
+2026-01-11 22:23:02,887 [INFO] (main) # nsuccesses: 13 nattempts: 187 success_prob: 0.06951871657754011 undetermined: 0
+2026-02-04 19:15:02,584 [INFO] (main) Starting shoot2 procedure
+2026-02-04 19:15:02,586 [INFO] (main) We already have enough successes! moving on

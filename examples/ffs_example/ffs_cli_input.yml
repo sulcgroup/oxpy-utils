@@ -1,0 +1,44 @@
+# ==========================================================
+# Setup file for Forward Flux Sampling (FFS) simulations
+# ==========================================================
+# This file can be used with the --input flag:
+# python ffs_cli.py --input ffs_cli_input.yml
+# ----------------------------------------------------------
+
+# this example file should replicate the melting sampling in tests/test_forward_flux_sampling.py
+
+# directories
+job_name: "ffs_example"
+file_dir: "../8_nt_duplex_melting_cpu/oxdna_files" # directory containing input .top and .dat files
+output_dir: "./ffs_example_output"
+num_cpus: 4 # number of CPUs to use for parallel simulation
+desired_n_successes: 12  # number of successful last_confs to collect at each interface
+use_cuda: false  # whether to use CUDA. defaults to "false"
+input_file_params: # additional params which will apply to all oxdna simulations.
+  T: "70C" # simulation temperature, deliberately high to make example run faster
+order_parameters:
+  native: # name of order parameter. see `interface` `op` below
+    order_parameter: "bond"  # type of order parameter
+    nucleotide_indexes_0: [0, 1,2,3,4,5,6,7] # strand 1
+    nucleotide_indexes_1: [15, 14, 13, 12, 11, 10, 9, 8] # strand 2
+  distance:
+    order_parameter: "mindistance"  # type of order parameter
+    nucleotide_indexes_0: [0, 1,2,3,4,5,6,7] # strand 1
+    nucleotide_indexes_1: [15, 14, 13, 12, 11, 10, 9, 8] # strand 2
+
+interfaces:
+  - op: "native"
+    value: 7
+    compare: "<="
+  - op: "native"
+    value: 6
+    compare: "<="
+  - op: "native"
+    value: 4
+    compare: "<="
+  - op: "native"
+    value: 2
+    compare: "<="
+  - op: "distance"
+    value: 5.
+    compare: ">"

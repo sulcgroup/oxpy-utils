@@ -1,0 +1,86 @@
+INFO: seeding the RNG with 1768195372
+INFO: Initializing backend 
+INFO: Simulation type: FFS_MD
+INFO: The generator will try to take into account bonded interactions by choosing distances between bonded neighbours no larger than 2.000000
+INFO: Using 'oxDNA2_sequence_dependent_parameters.txt' as the input for sequence-dependent values
+INFO: Converting temperature from Celsius (70.000000 C°) to simulation units (0.114383)
+INFO: Running Debye-Huckel at salt concentration =  1
+INFO: Using different widths for major and minor grooves
+INFO: Temperature change detected (new temperature: 70.00 C, 343.15 K), re-initialising the DNA interaction
+DEBUG: Debye-Huckel parameters: Q=0.054300, lambda_0=0.361646, lambda=0.386780, r_high=1.160341, cutoff=2.703309
+DEBUG: Debye-Huckel parameters: debye_huckel_RC=1.740512e+00, debye_huckel_B=6.921804e-03
+INFO: The Debye length at this temperature and salt concentration is 0.386780
+INFO: pid: 22333
+DEBUG: Debye-Huckel parameters: Q=0.054300, lambda_0=0.361646, lambda=0.386780, r_high=1.160341, cutoff=2.703309
+DEBUG: Debye-Huckel parameters: debye_huckel_RC=1.740512e+00, debye_huckel_B=6.921804e-03
+INFO: The Debye length at this temperature and salt concentration is 0.386780
+INFO: (Cells.cpp) N_cells_side: 4, 4, 4; rcut=2.80331, IS_MC: 0
+INFO: N: 16, N molecules: 2
+INFO: Parsing order parameter file op.txt
+INFO: Order parameter type bond found, processing
+INFO: --> Adding HB pair (0, 15) to order parameter `native'
+INFO: --> Adding HB pair (1, 14) to order parameter `native'
+INFO: --> Adding HB pair (2, 13) to order parameter `native'
+INFO: --> Adding HB pair (3, 12) to order parameter `native'
+INFO: --> Adding HB pair (4, 11) to order parameter `native'
+INFO: --> Adding HB pair (5, 10) to order parameter `native'
+INFO: --> Adding HB pair (6, 9) to order parameter `native'
+INFO: --> Adding HB pair (7, 8) to order parameter `native'
+INFO: Order parameter type mindistance found, processing
+INFO: --> Adding HB pair (0, 15) to order parameter `distance'
+INFO: --> Adding HB pair (1, 14) to order parameter `distance'
+INFO: --> Adding HB pair (2, 13) to order parameter `distance'
+INFO: --> Adding HB pair (3, 12) to order parameter `distance'
+INFO: --> Adding HB pair (4, 11) to order parameter `distance'
+INFO: --> Adding HB pair (5, 10) to order parameter `distance'
+INFO: --> Adding HB pair (6, 9) to order parameter `distance'
+INFO: --> Adding HB pair (7, 8) to order parameter `distance'
+INFO:  File op.txt parsed; found 1 hb_dim, 1 dist_dim
+INFO: Setting initial value for the order parameter...
+INFO: diffusion fixed.. -17.4141 -17.4141
+INFO: diffusion fixed.. -16.5549 -16.5549
+INFO: diffusion fixed.. -16.2539 -16.2539
+INFO: diffusion fixed.. -17.6293 -17.6293
+INFO: diffusion fixed.. -15.2492 -15.2492
+INFO: diffusion fixed.. -18.7244 -18.7244
+INFO: diffusion fixed.. -16.2185 -16.2185
+INFO: diffusion fixed.. -18.5576 -18.5576
+INFO: diffusion fixed.. -20.4589 -20.4589
+INFO: diffusion fixed.. -17.8966 -17.8966
+INFO: diffusion fixed.. -16.3059 -16.3059
+INFO: diffusion fixed.. -17.7755 -17.7755
+INFO: diffusion fixed.. -15.0444 -15.0444
+INFO: diffusion fixed.. -16.2292 -16.2292
+INFO: diffusion fixed.. -17.5393 -17.5393
+INFO: diffusion fixed.. -15.5369 -15.5369
+INFO: diffusion fixed.. -18.9171 -18.9171
+INFO: diffusion fixed.. -17.77 -17.77
+INFO: diffusion fixed.. -15.1417 -15.1417
+INFO: diffusion fixed.. -18.5289 -18.5289
+INFO: diffusion fixed.. -12.8218 -12.8218
+INFO: diffusion fixed.. -13.3568 -13.3568
+INFO: diffusion fixed.. -13.8335 -13.8335
+INFO: diffusion fixed.. -15.6765 -15.6765
+INFO: diffusion fixed.. -19.1688 -19.1688
+INFO: Reached condition1
+INFO: Reached stop conditions, stopping in step 2857832
+INFO: FFS final values: native: 8; distance:  0.377116133; 
+
+INFO: Total Running Time: 72.8368 s, per step: 0.0285002 ms
+INFO: Timings, in seconds, by Timer (total, own, spent in children)
+> SimBackend                         72.837 (100.0%)        5.010 (  6.9%)       67.827 ( 93.1%)
+***> Lists                            1.243 (  1.7%)        1.243 (  1.7%)        0.000 (  0.0%)
+***> Thermostat                       0.813 (  1.1%)        0.813 (  1.1%)        0.000 (  0.0%)
+***> Forces                          60.779 ( 83.4%)       60.779 ( 83.4%)        0.000 (  0.0%)
+***> First Step                       3.353 (  4.6%)        3.353 (  4.6%)        0.000 (  0.0%)
+***> Observables                      1.639 (  2.3%)        1.639 (  2.3%)        0.000 (  0.0%)
+
+INFO: Lists updated 143651 times (every ~17.790792 steps)
+INFO: Aggregated I/O statistics (set debug=1 for file-wise information)
+	 23.214 KB written to files
+	  0.000  B written to stdout/stderr
+	For a total of 0.000311 MB/s
+
+
+Please cite at least the following publication for any work that uses the oxDNA simulation package
+  * E. Poppleton et al., J. Open Source Softw. 8, 4693 (2023), DOI: 10.21105/joss.04693

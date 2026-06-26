@@ -1,0 +1,13 @@
+,File,Attempts,Successes
+0,ffs_example_output/initial_flux/success_1.dat,11,0
+1,ffs_example_output/initial_flux/success_2.dat,11,2
+2,ffs_example_output/initial_flux/success_3.dat,11,1
+3,ffs_example_output/initial_flux/success_4.dat,9,1
+4,ffs_example_output/initial_flux/success_5.dat,15,0
+5,ffs_example_output/initial_flux/success_6.dat,13,2
+6,ffs_example_output/initial_flux/success_7.dat,14,1
+7,ffs_example_output/initial_flux/success_8.dat,9,0
+8,ffs_example_output/initial_flux/success_9.dat,16,0
+9,ffs_example_output/initial_flux/success_10.dat,19,5
+10,ffs_example_output/initial_flux/success_11.dat,17,0
+11,ffs_example_output/initial_flux/success_12.dat,16,0

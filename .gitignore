@@ -1,0 +1,26 @@
+# core non-track folders
+venv
+wham
+build
+docs
+.claude
+*.egg_info
+
+# claude memory doc
+CLAUDE.md
+
+# python index cache
+*.pyidx
+
+# example runtime directories
+### 8nt duplex
+examples/tutorials/8nt_duplex_melting_cpu/8nt_duplex_melting_tutorial_0
+# cadnano workflow
+examples/tutorials/cadnano_origami_workflow/run
+# forward flux sampling example
+examples/tutorials/ffs_example/ffs_example_output
+# vmmc graph reweight
+examples/tutorials/vmmc_graph_reweight_8nt_duplex/oxdna_files
+examples/tutorials/vmmc_graph_reweight_8nt_duplex/vmmc_windowing_output
+# windowing
+examples/tutorials/vmmc_windowing_8nt_duplex

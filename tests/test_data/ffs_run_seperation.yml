@@ -1,0 +1,55 @@
+# ==========================================================
+# Configuration for Forward Flux Sampling (FFS) Simulation
+# ==========================================================
+
+# --- Directories ---
+# Path to the directory containing the oxDNA .top and .dat files
+job_name: "ffs_test_job"
+file_dir: "/home/josh/ipy_oxDNA/examples/tutorials/8_nt_duplex_melting_cpu/oxdna_files"
+output_dir: "/tmp/ffs"
+
+
+# --- Bond Definitions ---
+# Each bond is defined as a pair of nucleotide indices
+bonds: &bond_indices
+  - [0, 1, 2, 3, 4, 5, 6, 7]
+  - [14, 13, 12, 11, 10, 9, 8]
+
+
+# --- Order Parameters ---
+order_parameters:
+  native:
+    type: bond
+    bonds: *bond_indices
+  mindist:
+    type: mindistance
+    bonds: *bond_indices
+
+
+# --- Simulation Settings ---
+num_cpus: 4
+desired_n_successes: 6
+use_cuda: false # swaps input file between "ffs" and "ffs_cuda"
+
+
+# --- FFS Interfaces ---
+interfaces:
+  - name: lambda_f
+    order_param: native
+    threshold: 8
+    comparison: LT
+  - name: lambda_0
+    order_param: native
+    threshold: 6
+    comparison: LEQ
+  - name: lambda_success_native
+    order_param: native
+    threshold: 4
+    comparison: LEQ
+  - name: lambda_success_mindist
+    order_param: mindist
+    threshold: 5.0
+    comparison: GT
+
+input_file_params:
+  T: "55C"
