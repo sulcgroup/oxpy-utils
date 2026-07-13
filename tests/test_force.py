@@ -9,8 +9,7 @@ from oxpy_utils.utils.force import (
     zip_strands, load_forces_from_txt, load_forces_from_json,
 )
 
-EXAMPLES_DIR = Path(__file__).parent.parent / 'examples' / 'tutorials' / '8_nt_duplex_melting_cpu' / 'oxdna_files'
-EXAMPLE_FORCE_FILE = EXAMPLES_DIR / 'duplex_box_30_force.txt'
+EXAMPLE_FORCE_FILE = Path(__file__).parent / 'test_data' / 'duplex_forces.txt'
 
 
 class TestGetForceType:

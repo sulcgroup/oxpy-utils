@@ -1358,6 +1358,17 @@ def _tacoxdna_src() -> Path:
     return p
 
 
+def _fasta_to_sqs(fasta_path: Path, out_dir: Path) -> Path:
+    """Strip FASTA header lines and join the sequence into one line for tacoxDNA."""
+    text = fasta_path.read_text()
+    if not any(line.startswith('>') for line in text.splitlines()):
+        return fasta_path.resolve()
+    plain = ''.join(line.strip() for line in text.splitlines() if not line.startswith('>'))
+    out = out_dir / 'sequence.sqs'
+    out.write_text(plain)
+    return out
+
+
 def _tacox_run(script: str, args: list[str], work_dir: Path) -> tuple[Path, Path]:
     """
     Run a tacoxDNA *-to-oxDNA conversion script and return (conf_path, top_path).
@@ -1395,17 +1406,24 @@ def load_dna_structure_from_pdb(pdb_path: Union[str, Path],
 
 
 def load_dna_structure_from_cadnano(json_path: Union[str, Path],
-                                     lattice: str) -> DNAStructure:
+                                     lattice: str,
+                                     sequence_file: Optional[Union[str, Path]] = None) -> DNAStructure:
     """Load a DNAStructure from a cadnano JSON file using tacoxDNA's cadnano_oxDNA converter.
 
     lattice: 'sq' for square lattice, 'he' for hexagonal lattice.
+    sequence_file: optional FASTA file; when provided, bases are assigned from it
+                   instead of randomly, making the output deterministic.
     """
     if lattice not in ('sq', 'he'):
         raise ValueError("lattice must be 'sq' (square) or 'he' (hexagonal)")
     json_path = Path(json_path).resolve()
     with tempfile.TemporaryDirectory() as _tmpdir:
         tmpdir = Path(_tmpdir)
-        conf, top = _tacox_run('cadnano_oxDNA.py', [str(json_path), lattice], tmpdir)
+        args = [str(json_path), lattice]
+        if sequence_file is not None:
+            sqs = _fasta_to_sqs(Path(sequence_file), tmpdir)
+            args += ['--sequence', str(sqs)]
+        conf, top = _tacox_run('cadnano_oxDNA.py', args, tmpdir)
         return load_dna_structure(top, conf)
 
 

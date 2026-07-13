@@ -1144,12 +1144,12 @@ class VmmcWindowing(VMMCMetaSimulation):
 
         return np.where(merged_count > 0, merged_sum / merged_count, 0.)
 
-    def save_merged_weights(self, skip_val: Optional[float] = 0., fname: str = "merged_weights.txt"):
+    def save_merged_weights(self, fname: str = "merged_weights.txt", skip_val: Optional[float] = 0.):
         """
         combine/average weights across all windows, then save to a file in the same format as the
         individual window weight files (space-separated coordinates + weight).
         """
-        assert isinstance(skip_val, (float, int)), f"Invalid value for skip_val: {skip_val}"
+        assert skip_val is None or isinstance(skip_val, (float, int)), f"Invalid value for skip_val: {skip_val}"
         assert isinstance(fname, str), f"Invalid value for fname: {fname}"
         merged_weight = self.get_merged_weights()
 

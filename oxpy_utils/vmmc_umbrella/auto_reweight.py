@@ -52,7 +52,7 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         load existing iterations from disk
         """
         iteration_dirs = sorted([d for d in self.tld.iterdir() if d.is_dir()],
-                                key=lambda d: int(re.match("iteration_(\d+)", d.name).group(1)))
+                                key=lambda d: int(re.match(r"iteration_(\d+)", d.name).group(1)))
         for iteration_directory in iteration_dirs:
             replicas = [
                 VirtualMoveMonteCarlo(replica_directory) for replica_directory

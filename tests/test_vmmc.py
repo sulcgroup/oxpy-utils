@@ -29,7 +29,7 @@ def vmmc_sim(tmp_path) -> VirtualMoveMonteCarlo:
     # Path to the examples directory in your package
     # Adjust the path as necessary depending on your package structure
     examples_dir = Path(
-        __file__).parent.parent / 'examples' / 'tutorials' / '8_nt_duplex_melting_cpu' / 'oxdna_files'
+        __file__).parent.parent / 'examples' / '8nt_duplex_files'
 
     # Files to be copied
     files_to_copy = ['duplex_box_30.top', 'duplex_box_30.dat']
@@ -71,7 +71,7 @@ def vmmc_replicas(tmp_path) -> VmmcReplicasGroup:
     reps.temperatures = [19, 21, 23, 25, 27, 29, 31]
 
     # todo: actually two distinct systems instead of the same one twice
-    source_dir_path = Path(__file__).parent.parent / 'examples' / 'tutorials' / '8_nt_duplex_melting_cpu' / 'oxdna_files'
+    source_dir_path = Path(__file__).parent.parent / 'examples' / '8nt_duplex_files'
     a_src_path = source_dir_path
     b_src_path = source_dir_path
     # set up 3 replicas each of system "a" and system "b", located at tmp_path

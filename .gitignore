@@ -5,6 +5,7 @@ build
 docs
 .claude
 *.egg_info
+__pycache__
 
 # claude memory doc
 CLAUDE.md

@@ -22,7 +22,7 @@ def test_load_dna_structure() -> DNAStructure:
     load an example structure
     """
     examples_dir = Path(
-        __file__).parent.parent / 'examples' / 'tutorials' / '8_nt_duplex_melting_cpu' / 'oxdna_files'
+        __file__).parent.parent / 'examples' / '8nt_duplex_files'
     return load_dna_structure(examples_dir / "duplex_box_30.top",
                        examples_dir / "duplex_box_30.dat")
 

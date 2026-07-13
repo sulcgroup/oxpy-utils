@@ -17,7 +17,7 @@ class TestSimulation:
         # Path to the examples directory in your package
         # Adjust the path as necessary depending on your package structure
         examples_dir = Path(
-            __file__).parent.parent / 'examples' / 'tutorials' / '8_nt_duplex_melting_cpu' / 'oxdna_files'
+            __file__).parent.parent / 'examples' / '8nt_duplex_files'
 
         # Files to be copied
         files_to_copy = ['duplex_box_30.top', 'duplex_box_30.dat']
@@ -43,7 +43,7 @@ class TestSimulation:
         # Path to the examples directory in your package
         # Adjust the path as necessary depending on your package structure
         examples_dir = Path(
-            __file__).parent.parent / 'examples' / 'tutorials' / '8_nt_duplex_melting_cpu' / 'oxdna_files'
+            __file__).parent.parent / 'examples' / '8nt_duplex_files'
 
         # Files to be copied
         files_to_copy = ['duplex_box_30.top', 'duplex_box_30.dat']
@@ -221,7 +221,7 @@ class TestSimulationManager:
         # Path to the examples directory in your package
         # Adjust the path as necessary depending on your package structure
         examples_dir = Path(
-            __file__).parent.parent / 'examples' / 'tutorials' / '8_nt_duplex_melting_cpu' / 'oxdna_files'
+            __file__).parent.parent / 'examples' / '8nt_duplex_files'
 
         # Files to be copied
         files_to_copy = ['duplex_box_30.top', 'duplex_box_30.dat']

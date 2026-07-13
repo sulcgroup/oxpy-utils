@@ -8,7 +8,7 @@ import pytest
 from oxpy_utils.oxdna_simulation import Analysis, Simulation
 from oxDNA_analysis_tools.UTILS.get_confs import Configuration
 
-EXAMPLES = Path(__file__).parent.parent / 'examples' / 'tutorials' / '8_nt_duplex_melting_cpu' / 'oxdna_files'
+EXAMPLES = Path(__file__).parent.parent / 'examples' / '8nt_duplex_files'
 
 
 @pytest.fixture(scope='module')

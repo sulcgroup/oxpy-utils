@@ -56,7 +56,7 @@ def test_ffs_seperation(tmp_path):
 
     # Path to the examples directory in your package
     # Adjust the path as necessary depending on your package structure
-    examples_dir = Path("..")/ 'examples' / 'tutorials' / '8_nt_duplex_melting_cpu' / 'oxdna_files'
+    examples_dir = Path(__file__).parent.parent / 'examples' / '8nt_duplex_files'
 
     num_cpus = max(os.cpu_count() // 2, 1) # don't eat them all
     desired_n_successes = 12
@@ -100,7 +100,7 @@ def test_load_ffs(tmp_path):
     pass
 
 def test_ffs_seperation_from_yml(tmp_path):
-    examples_dir = Path(__file__).parent.parent / "examples" / "tutorials" / "8_nt_duplex_melting_cpu" / "oxdna_files"
+    examples_dir = Path(__file__).parent.parent / "examples" / "8nt_duplex_files"
 
     ffs_config = {
         "job_name": "ffs_test_job",

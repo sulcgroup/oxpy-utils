@@ -25,7 +25,7 @@ from oxpy_utils.vmmc_umbrella.windowing import VmmcWindowing
 
 EXAMPLES_DIR = (
     Path(__file__).parent.parent
-    / "examples" / "tutorials" / "8_nt_duplex_melting_cpu" / "oxdna_files"
+    / "examples" / "8nt_duplex_files"
 )
 # A partially-melted configuration for window 1 (states 0–5 bonds).
 # The default init.dat starts at 8 bonds, which is outside window 1's state space.

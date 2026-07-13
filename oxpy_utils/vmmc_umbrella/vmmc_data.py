@@ -135,7 +135,7 @@ def read_vmmc_data(file: Path, op: OrderParameter, T_precision: int = 1) -> VMMC
         temperatures = [round((temp_unit * 3000) - 273.15, T_precision) for temp_unit in sim_temp_units]
 
     # Read the rest of the file as a pandas dataframe
-    df = pd.read_csv(file, skiprows=1, header=None, delim_whitespace=True)
+    df = pd.read_csv(file, skiprows=1, header=None, sep=r'\s+')
     assert len(op.pairs) == len(df.index) - 1,\
         "Number of order parameter pairs are incompatible with data histogram shape!"
     df.columns = ["h_bonds", "count", "unbiased_count", *[f"unbiased_count_{T}" for T in temperatures]]

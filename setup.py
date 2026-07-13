@@ -13,7 +13,7 @@ setup(
     license='MIT',
     install_requires=[
         'numpy',
-        'scipy==1.14.0',
+        'scipy',
         'matplotlib',
         'pandas',
         'pyarrow',

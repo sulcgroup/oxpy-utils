@@ -16,7 +16,7 @@ from oxpy_utils.structure_editor.dna_structure import (
 )
 
 TACOX_TESTS = Path(__file__).parents[2] / 'tacoxDNA' / 'tests'
-OXDNA_EXAMPLES = Path(__file__).parent.parent / 'examples' / 'tutorials' / 'vmmc_windowing_8nt_duplex' / 'oxdna_files'
+M13MP18_FASTA = Path(__file__).parent / 'test_data' / 'm13mp18fsa.txt'
 
 
 def _collect_bases(struct: DNAStructure):
@@ -134,7 +134,8 @@ class TestLoadFromCadnano:
     @pytest.fixture(scope='class')
     def cadnano_struct(self):
         return load_dna_structure_from_cadnano(
-            TACOX_TESTS / 'cadnano_oxDNA' / 'init.json', lattice='sq')
+            TACOX_TESTS / 'cadnano_oxDNA' / 'init.json', lattice='sq',
+            sequence_file=M13MP18_FASTA)
 
     def test_returns_dna_structure(self, cadnano_struct):
         assert isinstance(cadnano_struct, DNAStructure)

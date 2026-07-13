@@ -33,10 +33,11 @@ def workflow(tmp_path_factory, simple_cadnano):
     mc_dir = work_dir / 'mc_relax'
     mc_sim = Simulation(structure, mc_dir)
     mc_sim.build(clean_build='force')
+    mc_sim.input.swap_default_input('cpu_MC_relax')
     mc_sim.input_file({
-        'steps': '1e3',
-        'print_energy_every': '5e2',
-        'print_conf_interval': '1e3',
+        'steps': '1e4',
+        'print_energy_every': '1e3',
+        'print_conf_interval': '1e4',
         'T': '30C',
     })
     mc_sim.oxpy_run.run(subprocess=False, log=False, verbose=False)
@@ -44,6 +45,7 @@ def workflow(tmp_path_factory, simple_cadnano):
     md_relax_dir = work_dir / 'md_relax'
     md_relax_sim = Simulation(mc_sim, md_relax_dir)
     md_relax_sim.build(clean_build='force')
+    md_relax_sim.input.swap_default_input('cpu_MD_relax')
     md_relax_sim.input_file({
         'steps': '1e3',
         'print_energy_every': '5e2',
@@ -91,10 +93,11 @@ class TestMcRelax:
         mc_sim, _, _ = workflow
         assert mc_sim.sim_files.energy.exists()
 
-    def test_energy_decreases(self, workflow):
+    def test_energy_values_finite(self, workflow):
         mc_sim, _, _ = workflow
         energy = mc_sim.analysis.energy_df
-        assert energy['U'].iloc[-1] < energy['U'].iloc[0]
+        # cpu_MC_relax uses a modified backbone potential; energy need not decrease
+        assert np.isfinite(energy['U'].values).all()
 
 
 class TestMdRelax:

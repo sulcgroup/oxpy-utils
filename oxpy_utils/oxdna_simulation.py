@@ -132,6 +132,9 @@ class Simulation(SimDirInfo):
             assert sim_dir is not None
             self.file_dir = sim_dir
             self._build_sim = BuildSimulationFromStructure(self, file_dir)
+        elif isinstance(file_dir, Simulation):
+            self.file_dir = file_dir.sim_dir
+            self._build_sim = None
         elif file_dir is None:
             warnings.warn("File dir set to `None`, hopefully you know what you're doing.")
         else:
@@ -302,7 +305,7 @@ class Simulation(SimDirInfo):
                                'Type y/yes to continue or anything else to return (use clean_build="force" '
                                'to skip this message)')
                 if (answer == 'y') or (answer == 'yes'):
-                    self.input.clear()
+                    self.input.input_dict = {}
                     shutil.rmtree(f'{self.sim_dir}/')
                     self.build_sim.force_cache = None
                 else:
