@@ -1426,9 +1426,7 @@ class SimulationManager:
                 if not self.terminate_queue.empty():
                     if run_when_failed is False:
                         simulation_error_message = self.terminate_queue.get()
-                        # Assuming OxDNAError exists in oxpy or define a placeholder
-                        class OxDNAError(Exception): pass
-                        self.handle_death(exception=OxDNAError, message=simulation_error_message)
+                        self.handle_death(exception=oxpy.OxDNAError, message=simulation_error_message)
                         # handle_death should exit or raise, otherwise this loop continues
                         break # Exit loop after handling death if handle_death returns
 
@@ -1566,7 +1564,13 @@ class SimulationManager:
             sim_mem = self.get_sim_mem(sim, gpu_idx)
             self.gpu_memory_queue.put(sim_mem)
 
-        sim.oxpy_run.run(subprocess=False, custom_observables=self.custom_observables)
+        try:
+            sim.oxpy_run.run(subprocess=False, custom_observables=self.custom_observables)
+        except oxpy.OxDNAError:
+            # run_complete() intentionally re-raises OxDNAError for direct/manual use of
+            # oxpy_run; here we're the manager's own worker process, so absorb it instead
+            # of letting it kill this process - error_message is already set below.
+            pass
         if sim.oxpy_run.error_message is not None:
             self.terminate_queue.put(
                 f'Simulation exception encountered in {sim.sim_dir}:\n{sim.oxpy_run.error_message}')
