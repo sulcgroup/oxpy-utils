@@ -4,7 +4,7 @@ wham
 build
 docs
 .claude
-*.egg_info
+*.egg-info
 __pycache__
 
 # claude memory doc
