@@ -452,6 +452,7 @@ class VmmcAnalysis(Analysis):
             states_to_visualize = list(itertools.product([range(len(op)) for op in self.sim.list_order_parameters()]))
         if colors is None:
             colors = generate_distinct_colors(len(bond_op))
+        fig = None
         if ax is None:
             fig, ax = plt.subplots()
         # Find the index of the bond_op in the simulation's order parameters

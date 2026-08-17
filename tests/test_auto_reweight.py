@@ -25,7 +25,7 @@ def _bond_op(name="bonds", pairs=None) -> OrderParameter:
     return OrderParameter(name, "bond", pairs)
 
 
-def _make_ar(tmp_path, *, add_op=True, set_temps=True, set_builder=True) -> VMMCAutoReweight:
+def _make_ar(tmp_path, *, add_op=True, set_temps=True, set_builder=True, set_starting_conf=True) -> VMMCAutoReweight:
     ar = VMMCAutoReweight(tmp_path)
     if add_op:
         ar.add_order_parameter(_bond_op())
@@ -33,6 +33,8 @@ def _make_ar(tmp_path, *, add_op=True, set_temps=True, set_builder=True) -> VMMC
         ar.extrapolate_hist_Ts = ["30C", "40C"]
     if set_builder:
         ar.build_replica = lambda meta, sim: None
+    if set_starting_conf:
+        ar.starting_conf = tmp_path
     return ar
 
 
@@ -91,6 +93,11 @@ class TestCheckReady:
         ar = _make_ar(tmp_path, set_builder=False)
         ar.build_replica = None
         with pytest.raises(ValueError, match="replica"):
+            ar.check_ready()
+
+    def test_raises_without_starting_conf(self, tmp_path):
+        ar = _make_ar(tmp_path, set_starting_conf=False)
+        with pytest.raises(ValueError, match="starting_conf"):
             ar.check_ready()
 
     def test_passes_when_all_set(self, tmp_path):
@@ -455,9 +462,14 @@ class TestVMMCGraphReweightComputeWeights:
         assert result.shape == (3,)
 
     def test_balanced_transitions_give_flat_weights(self, tmp_path):
-        # Equal forward and reverse transitions → all desired states get same log-weight target
-        # 0→1→2→1→0→1→2→1→0  (balanced 0↔1 and 1↔2)
-        seq = [(0,), (1,), (2,), (1,), (0,), (1,), (2,), (1,), (0,)]
+        # Edge targets use per-visit transition rates (c[i->j] / visits to i), not raw
+        # counts — raw crossing counts are ~symmetric for *any* reversible MC regardless
+        # of whether sampling is flat (that was the bug), so "balanced" here means equal
+        # visits to each state *and* equal raw counts in both directions per edge, which
+        # together give equal per-visit rates and hence a zero log-weight target.
+        # Visits: 0×4, 1×4, 2×4 (extra same-state entries pad visit counts without adding
+        # transitions). Transitions: c[0->1]=c[1->0]=2, c[1->2]=c[2->1]=2.
+        seq = [(0,), (0,), (1,), (2,), (2,), (1,), (0,), (1,), (2,), (2,), (1,), (0,)]
         result = self._run(tmp_path, seq)
         # min is 1 after renorm; all desired (all states) should be equal
         assert result[0] == pytest.approx(result[1], rel=0.01)
@@ -485,6 +497,26 @@ class TestVMMCGraphReweightComputeWeights:
         Observed: c[0→1]=9, c[1→2]=9, all reverse counts=0.
         With ε=1: both edges have target = log(1/10).
         Least-squares gives log_w = [log10, 0, -log10]; after renorm → [100, 10, 1].
+        This exercises the raw per-edge math directly, so disable the max_log_weight_step
+        trust region (see test_max_log_weight_step_caps_single_edge_correction for that).
+        """
+        gr = _make_gr(tmp_path)
+        gr.graph_pseudo_count = 1.0
+        gr.max_log_weight_step = float("inf")
+        seq = [(0,), (1,), (2,)] * 9
+        sim = _mock_sim_with_energy_df(seq)
+
+        result = gr.compute_next_it_weights([sim])
+
+        assert result[2] == pytest.approx(1.0, rel=1e-4)
+        assert result[1] == pytest.approx(10.0, rel=1e-4)
+        assert result[0] == pytest.approx(100.0, rel=1e-4)
+
+    def test_max_log_weight_step_caps_single_edge_correction(self, tmp_path):
+        """
+        Same one-directional-flow scenario as above (uncapped target = log(1/10) per
+        edge), but with the default max_log_weight_step (log(2)) left in place: each
+        edge's correction should be clipped to a 2x ratio instead of the raw 10x.
         """
         gr = _make_gr(tmp_path)
         gr.graph_pseudo_count = 1.0
@@ -494,8 +526,70 @@ class TestVMMCGraphReweightComputeWeights:
         result = gr.compute_next_it_weights([sim])
 
         assert result[2] == pytest.approx(1.0, rel=1e-4)
-        assert result[1] == pytest.approx(10.0, rel=1e-4)
-        assert result[0] == pytest.approx(100.0, rel=1e-4)
+        assert result[1] == pytest.approx(2.0, rel=1e-4)
+        assert result[0] == pytest.approx(4.0, rel=1e-4)
+
+    def test_rare_event_triggers_warning_and_damping(self, tmp_path):
+        # Iteration 0: state 0 essentially unvisited (one stray visit) -> almost no
+        # prior evidence for it.
+        seq0 = [(1,)] * 200 + [(0,), (1,)]
+        sim0 = _mock_sim_with_energy_df(seq0)
+
+        # Iteration 1 (last_it): a sudden, large influx of visits to state 0 -- e.g.
+        # VMMC finally crossing into a previously-unreached state.
+        seq1 = [(0,)] * 200 + [(1,)] * 50
+        sim1 = _mock_sim_with_energy_df(seq1)
+        old_weight = sim1.weights[0]  # mock sims default to weights = np.ones(3)
+
+        gr = _make_gr(tmp_path)
+        gr._subgroups = [[sim0], [sim1]]
+        with pytest.warns(UserWarning, match="rare"):
+            result_damped = gr.compute_next_it_weights([sim1])
+
+        # Same scenario with damping disabled (rare_event_damping=1.0) shows what the
+        # fresh evidence alone would imply, undamped.
+        gr_undamped = _make_gr(tmp_path)
+        gr_undamped._subgroups = [[sim0], [sim1]]
+        gr_undamped.rare_event_damping = 1.0
+        with pytest.warns(UserWarning, match="rare"):
+            result_undamped = gr_undamped.compute_next_it_weights([sim1])
+
+        # The damped result should land strictly between the previous weight and the
+        # undamped candidate, not jump straight to the undamped value.
+        assert result_undamped[0] != pytest.approx(old_weight, rel=1e-3)
+        lo, hi = sorted([old_weight, result_undamped[0]])
+        assert lo < result_damped[0] < hi
+
+    def test_accumulates_counts_across_iterations(self, tmp_path):
+        # Iteration 0: a large, well-balanced sample -> near-zero correction on its own.
+        seq0 = [(0,), (1,)] * 100
+        sim0 = _mock_sim_with_energy_df(seq0)
+
+        # Iteration 1 (last_it): a tiny sample that looks strongly imbalanced purely
+        # by chance (a single 0->1 transition, no 1->0 to balance it).
+        seq1 = [(0,), (1,)]
+        sim1 = _mock_sim_with_energy_df(seq1)
+
+        # Using only the latest iteration, that noisy n=1 sample fully determines
+        # the correction.
+        gr_single = _make_gr(tmp_path)
+        result_single = gr_single.compute_next_it_weights([sim1])
+
+        # With recorded history (iteration 0's well-balanced evidence plus iteration
+        # 1's noisy sample), the correction should be dominated by the larger,
+        # better-determined iteration 0 data instead of resetting to iteration 1 alone.
+        gr_accum = _make_gr(tmp_path)
+        gr_accum._subgroups = [[sim0], [sim1]]
+        result_accum = gr_accum.compute_next_it_weights([sim1])
+
+        ratio_single = result_single[0] / result_single[1]
+        ratio_accum = result_accum[0] / result_accum[1]
+
+        # Both correct in the same direction (state 1 slightly over-visited)...
+        assert ratio_single > 1
+        assert ratio_accum > 1
+        # ...but accumulating history should damp the lone noisy sample's swing.
+        assert ratio_accum < ratio_single
 
     def test_pseudo_count_dampens_extreme_imbalance(self, tmp_path):
         # Very asymmetric transitions: 0→1 seen 1000 times, 1→0 never

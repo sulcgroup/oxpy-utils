@@ -79,6 +79,10 @@ def make_reweighter(output_dir: Path, n_replicas: int = 3) -> VMMCGraphReweight:
     ar.add_order_parameter(NATIVE_OP)
     ar.n_reps = n_replicas
 
+    # Directory containing the starting .top/.dat files used to build every
+    # iteration's replicas.
+    ar.starting_conf = OXDNA_FILES
+
     # Temperatures at which the unbiased histograms are extrapolated after
     # each iteration.  Must match the format accepted by the oxDNA input.
     ar.extrapolate_hist_Ts = ["30C", "37C", "40C", "46C", "55C"]
@@ -224,6 +228,7 @@ def resume(output_dir: Path) -> VMMCGraphReweight:
     """
     ar = VMMCGraphReweight(output_dir)
     ar.add_order_parameter(NATIVE_OP)
+    ar.starting_conf = OXDNA_FILES
     ar.extrapolate_hist_Ts = ["30C", "37C", "40C", "46C", "55C"]
     ar.load()
     return ar

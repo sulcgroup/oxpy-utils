@@ -227,7 +227,7 @@ class VMMCMetaSimulation(ABC):
         bond_op = self.bond_ops()[bond_op_index]
 
         # Get the bond order parameter
-        if bond_op_index >= len(self[0].num_ops()):
+        if bond_op_index >= len(self.bond_ops()):
             raise ValueError(f"bond_op_index {bond_op_index} out of range (only {len(self.bond_ops())} bond ops)")
         replicas.plot_op_val_curve(bond_op, ax, replica_colors, show_legend)
 
