@@ -25,3 +25,5 @@ examples/tutorials/vmmc_graph_reweight_8nt_duplex/oxdna_files
 examples/tutorials/vmmc_graph_reweight_8nt_duplex/vmmc_windowing_output
 # windowing
 examples/tutorials/vmmc_windowing_8nt_duplex
+.vscode
+tests/test_data/*.pdb
