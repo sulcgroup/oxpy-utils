@@ -31,12 +31,12 @@
 
 from pathlib import Path
 
-import numpy as np
 import matplotlib.pyplot as plt
 
+from oxpy_utils.oxdna_simulation import BuildSimulationFromStructure
+from oxpy_utils.structure_editor.dna_structure import load_dna_structure
 from oxpy_utils.utils.order_parameter import OrderParameter
 from oxpy_utils.vmmc_umbrella.auto_reweight import VMMCGraphReweight
-
 
 # ---------------------------------------------------------------------------
 # Paths — reuse the oxdna_files from the vmmc_windowing tutorial
@@ -44,6 +44,9 @@ from oxpy_utils.vmmc_umbrella.auto_reweight import VMMCGraphReweight
 
 HERE = Path(__file__).parent
 OXDNA_FILES = HERE.parent / "vmmc_windowing_8nt_duplex" / "oxdna_files"
+STARTING_STRUCTURE = load_dna_structure(
+    OXDNA_FILES / "duplex_box_30.top", OXDNA_FILES / "duplex_box_30.dat"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -93,9 +96,14 @@ def make_reweighter(output_dir: Path, n_replicas: int = 3) -> VMMCGraphReweight:
     # Hard cap on the number of iterations (failsafe).
     ar.max_iterations = 10
 
-    # Steps per replica per iteration.  1e6 is enough to test the pipeline;
-    # production runs typically need 5e7–1e8.
-    ar.steps_per_iter = int(1e6)
+    # Steps per replica per iteration.  1e6 is enough to smoke-test the pipeline (no
+    # crashes, sane-looking numbers) but not enough data to actually reweight against;
+    # 1e7 turned out to still be too short for reliable re-nucleation statistics once
+    # melted (see the state-0 investigation: one replica can spend nearly an entire
+    # iteration's budget stuck in the fully-melted state while the others never reach it
+    # at all, giving wildly replica-dependent occupancy).  Bumped to 5e7 to give
+    # nucleation more chances per iteration.  Production runs typically need 5e7-1e8.
+    ar.steps_per_iter = int(5e7)
 
     # -----------------------------------------------------------------------
     # Pseudo-count: controls how aggressively unobserved edges are corrected.
@@ -121,6 +129,7 @@ def make_reweighter(output_dir: Path, n_replicas: int = 3) -> VMMCGraphReweight:
     # Set all oxDNA input parameters here.
     # -----------------------------------------------------------------------
     def build_replica(reweighter, sim):
+        sim.set_builder(BuildSimulationFromStructure(sim, STARTING_STRUCTURE))
         sim.build(clean_build="force")
         sim.input.swap_default_input("vmmc")
 
@@ -146,6 +155,29 @@ def make_reweighter(output_dir: Path, n_replicas: int = 3) -> VMMCGraphReweight:
         sim.weights[...] = sim.generate_weights(7.0)
 
     ar.build_start_weights = build_start_weights
+
+    # -----------------------------------------------------------------------
+    # end_iter_callback: called once per iteration, right after all its replicas
+    # finish running (see VMMCAutoReweight.run_iteration). Show the weights that
+    # produced this iteration alongside the resulting state-space (bond-count-vs-
+    # time) curve, so you can watch it converge (or not) iteration by iteration
+    # instead of only inspecting the final result.
+    # -----------------------------------------------------------------------
+    def show_iteration_progress():
+        iteration_idx = len(ar) - 1
+        fig, (ax_weights, ax_curve) = plt.subplots(1, 2, figsize=(14, 4))
+
+        ar.plot_iteration_weights(iteration=iteration_idx, ax=ax_weights)
+        ax_weights.set_title(f"Iteration {iteration_idx} weights")
+
+        ar.plot_bond_curves(subgroup_idx=iteration_idx, bond_op_index=0, ax=ax_curve)
+        ax_curve.set_title(f"Iteration {iteration_idx} state-space curve")
+
+        plt.tight_layout()
+        fig.savefig(ar.tld / f"iteration_{iteration_idx}_progress.png", dpi=150)
+        plt.show()
+
+    ar.end_iter_callback = show_iteration_progress
 
     return ar
 
