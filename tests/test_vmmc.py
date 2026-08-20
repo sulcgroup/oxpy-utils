@@ -13,6 +13,7 @@ from oxpy_utils.vmmc_umbrella.vmmc_replicas import VmmcReplicas, VmmcReplicasGro
 from oxpy_utils.vmmc_umbrella.vmmc_data import VMMCData, average_vmmc_data
 
 from oxpy_utils.oxdna_simulation import SimulationManager
+from oxpy_utils.utils.order_parameter import OrderParameter
 from oxpy_utils.vmmc_umbrella.vmmc import VirtualMoveMonteCarlo
 
 
@@ -62,6 +63,100 @@ def test_vmmc(vmmc_sim: VirtualMoveMonteCarlo):
     # build vmmc-specific stuff - needs to wait for file names to be assigned
     vmmc_sim.build_vmmc()
     # todo: more tests?
+
+
+def test_build_op_trajectory_observable(vmmc_sim: VirtualMoveMonteCarlo):
+    vmmc_sim.set_nucleotides(list(range(0, 7)), list(range(8, 15)))
+    vmmc_sim.build()
+    vmmc_sim.input["op_file"] = "op.txt"
+    vmmc_sim.input["weights_file"] = "weights.txt"
+    vmmc_sim.build_vmmc()
+
+    returned_name = vmmc_sim.build_op_trajectory_observable(100, name="op_trajectory")
+
+    assert returned_name == "op_trajectory"
+    assert "op_trajectory" in vmmc_sim.analysis.observables
+    observable = vmmc_sim.analysis.observables["op_trajectory"]
+    assert observable.print_every == 100
+    assert (vmmc_sim.sim_dir / "observables.json").is_file()
+
+
+def test_build_op_trajectory_observable_requires_order_parameters(vmmc_sim: VirtualMoveMonteCarlo):
+    with pytest.raises(AssertionError, match="No order parameters"):
+        vmmc_sim.build_op_trajectory_observable(100)
+
+
+class TestGenerateWeights:
+    def test_state_zero_gets_the_largest_weight(self, vmmc_sim: VirtualMoveMonteCarlo):
+        # Regression test: weights[possible_bonds[1:],] = [... for i in range(1, n)]
+        # unconditionally skipped index 0, silently leaving it at the raw fill value of 1.0
+        # -- identical to the *least*-biased state (most bonds) instead of continuing the
+        # geometric pattern to give it the *largest* bias (fewest bonds).
+        op = OrderParameter("native", "bond", [(0, 1), (2, 3), (4, 5), (6, 7)])  # states 0..4
+        vmmc_sim.add_order_parameter(op)
+        weights = vmmc_sim.generate_weights(7.0)
+        assert weights[0] == pytest.approx(7.0 ** 4)
+        assert weights[0] > weights[1]   # continues the pattern, not tied with the baseline
+
+    def test_matches_geometric_pattern_at_every_state(self, vmmc_sim: VirtualMoveMonteCarlo):
+        op = OrderParameter("native", "bond", [(0, 1), (2, 3), (4, 5), (6, 7)])
+        vmmc_sim.add_order_parameter(op)
+        weights = vmmc_sim.generate_weights(7.0)
+        n = len(op)
+        expected = [7.0 ** (n - 1 - i) for i in range(n)]
+        np.testing.assert_allclose(weights, expected)
+
+    def test_last_state_is_baseline_one(self, vmmc_sim: VirtualMoveMonteCarlo):
+        op = OrderParameter("native", "bond", [(0, 1), (2, 3), (4, 5), (6, 7)])
+        vmmc_sim.add_order_parameter(op)
+        weights = vmmc_sim.generate_weights(7.0)
+        assert weights[-1] == pytest.approx(1.0)
+
+
+def _sim_with_vmmc_df(sim: VirtualMoveMonteCarlo, occ_by_state: dict) -> VirtualMoveMonteCarlo:
+    """Inject a vmmc_df directly (indexed by state, matching read_vmmc_op_data's shape) so
+    plot_sampling_pie_chart can be exercised without any real oxDNA output on disk."""
+    import pandas as pd
+    sim.analysis._vmmc_df = pd.DataFrame(
+        {"unwt_occ": [v[0] for v in occ_by_state.values()],
+         "wt_occ": [v[1] for v in occ_by_state.values()]},
+        index=pd.Index(list(occ_by_state.keys()), name=sim.bond_op.name),
+    )
+    return sim
+
+
+class TestPlotSamplingPieChart:
+    def test_with_provided_ax_returns_none_figure(self, vmmc_sim: VirtualMoveMonteCarlo):
+        # Regression test: fig was referenced unconditionally at the end of the function but
+        # only ever assigned inside `if ax is None`, so a caller-supplied ax (as
+        # VMMCAutoReweight.visualize() always uses) raised UnboundLocalError.
+        op = OrderParameter("bonds", "bond", [(0, 1), (2, 3)])
+        vmmc_sim.add_order_parameter(op)
+        _sim_with_vmmc_df(vmmc_sim, {0: (10.0, 1.0), 1: (20.0, 2.0), 2: (30.0, 3.0)})
+
+        fig, ax = plt.subplots()
+        result_fig, result_ax = vmmc_sim.analysis.plot_sampling_pie_chart(bond_op=op, ax=ax)
+        plt.close(fig)
+
+        assert result_fig is None
+        assert result_ax is ax
+
+    def test_default_states_to_visualize_matches_real_states(self, vmmc_sim: VirtualMoveMonteCarlo):
+        # Regression test: itertools.product(*[...]) was missing its unpacking, so the
+        # default states_to_visualize was a single malformed tuple containing a range
+        # object, which never matched any real state -- the pie chart always rendered "No
+        # accessible states sampled" regardless of actual data.
+        op = OrderParameter("bonds", "bond", [(0, 1), (2, 3)])
+        vmmc_sim.add_order_parameter(op)
+        _sim_with_vmmc_df(vmmc_sim, {0: (10.0, 1.0), 1: (20.0, 2.0), 2: (30.0, 3.0)})
+
+        fig, ax = plt.subplots()
+        vmmc_sim.analysis.plot_sampling_pie_chart(bond_op=op, ax=ax)   # states_to_visualize=None
+        plt.close(fig)
+
+        # a real pie was drawn (ax.patches populated), not just the "no states" text fallback
+        assert len(ax.patches) > 0
+
 
 @pytest.fixture
 def vmmc_replicas(tmp_path) -> VmmcReplicasGroup:

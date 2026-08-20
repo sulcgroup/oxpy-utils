@@ -46,6 +46,13 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         self.steps_per_iter = 1e8
         self.max_iterations = float('inf')
         self.max_rel_std = 5.
+        # weight assigned to illegal (outside legal_states_mask) states. Default (1.0) is a
+        # soft sentinel appropriate when illegal == physically impossible (those states are
+        # unreachable regardless of weight). Callers for whom illegal states are reachable but
+        # must be excluded (e.g. VmmcWindowedAutoReweight, where "illegal" means "assigned to a
+        # different window") should set this to 0.0 -- VMMC's acceptance ratio makes a weight-0
+        # state a hard exclusion, since w_new=0 always rejects the move.
+        self.illegal_state_weight: float = 1.0
 
     def load(self):
         """
@@ -75,11 +82,12 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         Check if sampling criteria are met for accessible states only
         """
         # Create a mask for accessible states using vmmc_df
-        def state_is_desired(idx:int):
-            row = last_it[0].analysis.vmmc_df.loc[idx]
-            state_tuple = tuple(
-                row[op.name] for op in self.order_parameters()
-            )
+        def state_is_desired(idx: Union[int, tuple]):
+            # idx comes from vmmc_df's index, which is already set to the order
+            # parameter column(s) (see read_vmmc_op_data) -- it *is* the state tuple,
+            # not something to look up a row for. A single order parameter produces a
+            # plain (non-Multi) Index, so idx arrives as a bare scalar in that case.
+            state_tuple = idx if isinstance(idx, tuple) else (idx,)
             # Ignore states where any distance order parameter > 0
             if any(state_tuple[self.num_bond_ops():]):
                 return False
@@ -105,11 +113,12 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         Get standard deviation of sampling percent across replicas for accessible states only
         """
 
-        # Create mask for accessible states
+        # Create mask for accessible states. `row.name` is the row's index label --
+        # statistics is indexed by the order parameter state(s) (see
+        # calculate_sampling_and_probabilities), not by op-name columns.
         def state_is_accessible(row):
-            state_tuple = tuple(
-                row[op.name] for op in self.order_parameters()
-            )
+            idx = row.name
+            state_tuple = idx if isinstance(idx, tuple) else (idx,)
             # Ignore states where any distance order parameter > 0
             if any(state_tuple[self.num_bond_ops():]):
                 return False
@@ -133,6 +142,79 @@ class VMMCAutoReweight(VMMCMetaSimulation):
             raise ValueError("No bond order parameters specified for reweighting!")
         if not self.build_replica:
             raise ValueError("No replica building function specified!")
+
+    def describe_state_space(self,
+                             breakdown_op: Optional[Union[str, int, OrderParameter]] = None,
+                             verbose: bool = True) -> dict:
+        """
+        Calculate the size of this reweighter's order-parameter state space: how many
+        (op1_val, op2_val, ...) combinations are physically possible, how many survive
+        filter_legal_states, and how many survive filter_desired_states (the flat-sampling
+        target). Useful for sanity-checking whether a run's step budget is even plausible
+        for covering desired_state_list before spending compute on it.
+
+        :param breakdown_op: optional order parameter (by name, index, or OrderParameter) to
+            break the legal-state count down by, one entry per value of that op. Defaults to
+            the primary bond order parameter (bond_ops()[0]) if any bond ops are set.
+        :param verbose: if True, print a human-readable summary
+        :return: dict with keys "possible", "legal", "desired", and "breakdown"
+            (a dict mapping op value -> legal-state count, in ascending op-value order)
+        """
+        ops = self.order_parameters()
+        all_states = possible_states(*ops)
+        legal_states = self.legal_state_list
+        desired_states = self.desired_state_list
+
+        if breakdown_op is None and self._bond_ops:
+            breakdown_op = self._bond_ops[0]
+
+        breakdown = None
+        if breakdown_op is not None:
+            if isinstance(breakdown_op, str):
+                op_idx = next(i for i, op in enumerate(ops) if op.name == breakdown_op)
+            elif isinstance(breakdown_op, OrderParameter):
+                op_idx = next(i for i, op in enumerate(ops) if op.name == breakdown_op.name)
+            else:
+                op_idx = breakdown_op
+            counts: dict[int, int] = {}
+            for state in legal_states:
+                counts[state[op_idx]] = counts.get(state[op_idx], 0) + 1
+            breakdown = dict(sorted(counts.items()))
+
+        summary = {
+            "possible": len(all_states),
+            "legal": len(legal_states),
+            "desired": len(desired_states),
+            "breakdown": breakdown,
+        }
+
+        if verbose:
+            print(f"possible states: {summary['possible']}")
+            print(f"legal states:    {summary['legal']}")
+            print(f"desired states:  {summary['desired']}")
+            if breakdown is not None:
+                op_name = ops[op_idx].name
+                for val, count in breakdown.items():
+                    print(f"  {op_name}={val}: {count} legal states")
+
+        return summary
+
+    def check_energy_print_budget(self, print_energy_every: Union[int, float]):
+        """
+        Raise if a single iteration won't produce enough energy-print statements (summed
+        across all replicas) to have even one data point per desired state -- a necessary
+        (not sufficient) condition for the reweighter to see transitions across the whole
+        desired state space within an iteration.
+        """
+        n_desired = len(self.desired_state_list)
+        n_prints = self.n_reps * self.steps_per_iter / print_energy_every
+        if n_prints < n_desired:
+            raise ValueError(
+                f"Energy print budget too small: {self.n_reps} replicas x {self.steps_per_iter:.3g} steps / "
+                f"print_energy_every={print_energy_every:.3g} = {n_prints:.1f} energy-print statements per "
+                f"iteration, but there are {n_desired} desired states to sample. Increase steps_per_iter, "
+                f"decrease print_energy_every, or shrink the desired state space."
+            )
 
     def run(self):
         """
@@ -159,12 +241,15 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         it = VmmcReplicas(self.tld / f"iteration_{len(self)}",  self.tld / f"iteration_{len(self)}", self.n_reps)
         it.init()
         it.temperatures = self.extrapolate_hist_Ts
-        # apply settings
+        # apply settings. order parameters must be added before build_replica runs: most
+        # build_replica implementations call sim.build(...), and VirtualMoveMonteCarlo.build()
+        # asserts a bond order parameter is already set (it writes the op file as part of
+        # building).
         for vmmc in it:
-            self.build_replica(self, vmmc)
             for op in self.order_parameters():
                 if op is not None:
                     vmmc.add_order_parameter(op)
+            self.build_replica(self, vmmc)
         # compute new weights based on last iteration
         if len(self):
             print(f"Computing new weights from iteration {len(self)}....")
@@ -181,8 +266,9 @@ class VMMCAutoReweight(VMMCMetaSimulation):
                 self.build_start_weights(vmmc)
                 # update seed. if seed isn't specified it should default to system clock, but let's be safe
                 vmmc.input["seed"] = len(self) * self.n_reps + rep_idx # basically just counting up, will ensure unique
-                # label illegal states with weight 1.0, as an indicator. system will never actually visit these states
-                vmmc.weights[~self.legal_states_mask] = 1.0
+                # label illegal states with illegal_state_weight, as an indicator (or a hard
+                # exclusion -- see illegal_state_weight's docstring in __init__)
+                vmmc.weights[~self.legal_states_mask] = self.illegal_state_weight
                 # modify legal but undesired states to have low weights to discourage sampling
                 vmmc.weights[~self.desired_states_mask & self.legal_states_mask] /= self.zero_sample_weight_factor
                 # renormalize weights
@@ -192,8 +278,14 @@ class VMMCAutoReweight(VMMCMetaSimulation):
                 # build weight and op files
                 vmmc.build_vmmc_weight_file()
         for vmmc in it:
-            vmmc.build_vmmc_op_file()
+            # clear_file=True: build_replica typically already wrote the op file via
+            # sim.build(...), which appends rather than overwrites; without clearing first,
+            # this would duplicate every order-parameter block in the file.
+            vmmc.build_vmmc_op_file(clear_file=True)
             vmmc.input["steps"] = self.steps_per_iter
+        # sanity check before spending any compute: fail fast if there won't even be enough
+        # energy-print statements to cover the desired state space
+        self.check_energy_print_budget(it[0].input["print_energy_every"])
         # if a start-iteration callback is set, run it immediately before running the oxdna simulations
         self._subgroups.append(it)
         if self.start_iter_callback:
@@ -394,12 +486,15 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         sim = self[iteration][0]
 
         if len(self._bond_ops) == 1:
-            # 1D case - simple bar chart
-            sim.plot_weights((None,), ax=ax, colors=self.get_weights_colors())
+            # 1D case - simple bar chart. Only one bond op exists, so its index is
+            # unambiguous.
+            sim.plot_weights(0, ax=ax, colors=self.get_weights_colors())
         elif len(self._bond_ops) == 2:
-            # 2D case - heatmap with hatching
-            order_params_for_plot = (None, None, 0) if self.has_dist_op() else (None, None)
-            sim.plot_weights(order_params_for_plot, ax=ax)
+            # 2D case - heatmap with hatching. Plot the two bond ops (indices 0, 1); if a
+            # dist op is present it's the next order parameter (index 2) and gets held
+            # constant at its first (0) value rather than appearing as a plot axis.
+            const_ops = {2: 0} if self.has_dist_op() else None
+            sim.plot_weights([0, 1], const_ops=const_ops, ax=ax)
 
             # Add hatching for inaccessible states
             self._add_weight_vis_hatching(ax)
@@ -416,10 +511,11 @@ class VMMCAutoReweight(VMMCMetaSimulation):
 
         free_energy_dfs = []
 
-        # wonky index stuff
-        # help
-        op_vals_idxs = {op.name: np.array(list(set(a)))
-                        for op, a
+        # desired_state_list is a list of state tuples (one value per order parameter); for
+        # each order parameter, collect the set of values it takes on across desired states
+        # -- e.g. for `op`, which of its own values appear among the desired states
+        op_vals_idxs = {o.name: np.array(sorted(set(vals)))
+                        for o, vals
                         in zip(self.order_parameters(), zip(*self.desired_state_list))}
         indexer = op_vals_idxs[op.name]
         fig, ax = plt.subplots()
@@ -427,7 +523,11 @@ class VMMCAutoReweight(VMMCMetaSimulation):
 
         for i, sim in enumerate(self[iteration]):
             df = sim.analysis.get_data_over(op).df.copy()
-            df = df.iloc[indexer]
+            # get_data_over's df is indexed by op's own values (see its groupby(op.name)) --
+            # select by that label, not position. isin() (not .loc[indexer] directly) so a
+            # desired value that happens to have zero occupancy anywhere (and so never
+            # appears as a groupby key) is silently skipped rather than raising a KeyError.
+            df = df.loc[df.index.isin(indexer)]
             free_energy_dfs.append(df["free_energy"])
             ax.plot(df.index, df["free_energy"], color=colors[i], label=f"Replica {i}")
 
@@ -469,6 +569,12 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         # handle border reweighting if enabled
         if self.reweight_borders:
             self._apply_border_reweighting(weights, unwt_occ )
+
+        # illegal states must stay at illegal_state_weight regardless of anything above --
+        # otherwise they just carry over whatever they were renormalized to, which for
+        # illegal_state_weight=0 would silently reintroduce a nonzero (and thus not actually
+        # excluding) weight
+        weights[~self.legal_states_mask] = self.illegal_state_weight
 
         return weights
 
@@ -579,11 +685,34 @@ class VMMCGraphReweight(VMMCAutoReweight):
     The pseudo-count ε (graph_pseudo_count) smooths unobserved edges and bounds
     the magnitude of corrections, avoiding the step-changes produced by
     zero_sample_weight_factor in the histogram approach.
+
+    By default transitions are counted from energy_df, whose order-parameter columns
+    are only refreshed every print_energy_every steps -- fine for approximating the
+    sampling path, but at large print_energy_every several transitions can happen
+    between consecutive rows, which understates the true transition rate. Set
+    `op_trajectory_name` to the name used with
+    VirtualMoveMonteCarlo.build_op_trajectory_observable (called on each replica in
+    build_replica) to instead count transitions from that finer-grained, independently-
+    sampled order-parameter trajectory.
     """
 
     def __init__(self, tld_path: Path, sim_build_func: Optional[Callable] = None):
         super().__init__(tld_path, sim_build_func)
         self.graph_pseudo_count: float = 1.0
+        # name of the observable added via VirtualMoveMonteCarlo.build_op_trajectory_observable,
+        # if any. When set, transition counts are read from it instead of energy_df.
+        self.op_trajectory_name: Optional[str] = None
+        # per-iteration multiplicative boost applied to desired states whose sampling is
+        # unreliable (see undersampled_occ_threshold). Deliberately much smaller than
+        # zero_sample_weight_factor: this compounds every iteration a state stays
+        # under-sampled, so a large factor causes runaway weights that overshoot, dump an
+        # entire iteration's sampling into that one state, starve its neighbors into looking
+        # "unreliable" themselves next iteration, and oscillate rather than converge.
+        self.undersampled_boost_factor: float = 3.0
+        # normalized occupancy (0-1, relative to the most-sampled state in this window)
+        # below which a desired state's graph-solved weight is not trusted -- with too few
+        # observations the solve's estimate for it is noise, not signal
+        self.undersampled_occ_threshold: float = 1e-3
 
     def compute_next_it_weights(self, last_it: Union[VmmcReplicas, None] = None) -> np.ndarray:
         if last_it is None:
@@ -599,8 +728,13 @@ class VMMCGraphReweight(VMMCAutoReweight):
         # Count directed transitions between adjacent legal states
         transition_counts: dict[tuple, int] = {}
         for sim in last_it:
-            df = sim.analysis.energy_df
-            cols = [df[name].astype(int).values for name in op_names]
+            if self.op_trajectory_name is not None:
+                # columns: 0 = step, 1..N = order parameter values, in op_names order
+                raw = sim.analysis.observable_data(self.op_trajectory_name)
+                cols = [raw[i + 1].astype(int).values for i in range(len(op_names))]
+            else:
+                df = sim.analysis.energy_df
+                cols = [df[name].astype(int).values for name in op_names]
             state_seq = list(zip(*cols))
             for k in range(len(state_seq) - 1):
                 s_from, s_to = state_seq[k], state_seq[k + 1]
@@ -630,6 +764,8 @@ class VMMCGraphReweight(VMMCAutoReweight):
                 target = np.log(c_ji / c_ij)
                 edges.append((state_to_idx[state], state_to_idx[nbr], target))
 
+        unwt_occ = self.get_overall_unwt_occ(last_it)
+
         if not edges:
             return last_it[0].weights.copy()
 
@@ -652,17 +788,28 @@ class VMMCGraphReweight(VMMCAutoReweight):
         for state, idx in state_to_idx.items():
             new_weights[state] = np.exp(log_w_vec[idx])
 
+        # Desired states with unreliable (near-zero) observed occupancy give the graph solve
+        # no trustworthy signal: with only a handful of observations its estimate is noise,
+        # not evidence, and can come back arbitrarily (and often much *lower*) than what's
+        # actually needed -- discarding whatever bias the previous iteration was building up
+        # to reach them. Floor them at an escalated version of their previous weight instead
+        # (never *decrease* while still unreliable), using np.maximum rather than an outright
+        # override so a solve that *did* land on something reasonably high isn't thrown away.
+        unreliable_desired = (unwt_occ < self.undersampled_occ_threshold) & self.desired_states_mask
+        boosted_floor = last_it[0].weights[unreliable_desired] * self.undersampled_boost_factor
+        new_weights[unreliable_desired] = np.maximum(new_weights[unreliable_desired], boosted_floor)
+
         # Legal but non-desired states get suppressed
         new_weights[~self.desired_states_mask & self.legal_states_mask] /= self.zero_sample_weight_factor
-        # Illegal states keep a sentinel weight of 1
-        new_weights[~self.legal_states_mask] = 1.0
+        # Illegal states are held at illegal_state_weight (0.0 = hard exclusion; see its
+        # docstring in __init__)
+        new_weights[~self.legal_states_mask] = self.illegal_state_weight
         # Renormalize so min legal weight = 1
         legal_min = new_weights[self.legal_states_mask].min()
         if legal_min > 0:
             new_weights[self.legal_states_mask] /= legal_min
 
         if self.reweight_borders:
-            unwt_occ = self.get_overall_unwt_occ(last_it)
             self._apply_border_reweighting(new_weights, unwt_occ)
 
         return new_weights

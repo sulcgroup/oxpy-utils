@@ -1,18 +1,24 @@
 """
 Tests for VMMCAutoReweight in vmmc_umbrella/auto_reweight.py.
 
-Simulation-running methods (run, run_iteration, load, visualize) are not
-covered here — they require actual oxDNA output on disk.  Everything else
-is tested with lightweight mocks or pure numpy.
+Simulation-running methods (run, load, visualize) are not covered here --
+they require actual oxDNA output on disk. run_iteration's internal
+call-ordering contract (order parameters must be added to a replica before
+build_replica runs, since build_replica typically calls sim.build(), which
+needs them) is covered with a fully mocked VmmcReplicas. Everything else is
+tested with lightweight mocks or pure numpy.
 """
 from unittest.mock import MagicMock, patch
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 
 from oxpy_utils.utils.order_parameter import OrderParameter
 from oxpy_utils.vmmc_umbrella.auto_reweight import VMMCAutoReweight, VMMCGraphReweight
+from oxpy_utils.vmmc_umbrella.vmmc import VirtualMoveMonteCarlo
+from oxpy_utils.vmmc_umbrella.vmmc_replicas import VmmcReplicas
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +50,23 @@ def _mock_sim_with_stats(sampling_percents: list[float], op_name: str = "bonds")
         "wt_prob": [p / 100 for p in sampling_percents],
         "wt_free": [0.0] * len(sampling_percents),
     })
+    mock = MagicMock()
+    mock.analysis.statistics = stats
+    return mock
+
+
+def _mock_sim_with_indexed_stats(sampling_by_state: dict) -> MagicMock:
+    """
+    Return a mock sim whose analysis.statistics is indexed by state, matching the real
+    shape of VmmcAnalysis.statistics (see calculate_sampling_and_probabilities: the
+    DataFrame is built with index=vmmc_df.index, i.e. the order parameter value(s) --
+    there is no op-name column). Keys may be bare ints (single order parameter) or
+    tuples (multiple order parameters).
+    """
+    stats = pd.DataFrame(
+        {"sampling_percent": list(sampling_by_state.values())},
+        index=list(sampling_by_state.keys()),
+    )
     mock = MagicMock()
     mock.analysis.statistics = stats
     return mock
@@ -96,6 +119,193 @@ class TestCheckReady:
     def test_passes_when_all_set(self, tmp_path):
         ar = _make_ar(tmp_path)
         ar.check_ready()   # should not raise
+
+
+# ---------------------------------------------------------------------------
+# run_iteration call ordering
+# ---------------------------------------------------------------------------
+
+def _mock_replica_group(vmmc: MagicMock):
+    """A MagicMock standing in for a VmmcReplicas, yielding `vmmc` on every iteration/index."""
+    group = MagicMock()
+    group.__iter__ = MagicMock(side_effect=lambda: iter([vmmc]))
+    group.__getitem__ = MagicMock(side_effect=lambda i: vmmc)
+    return group
+
+
+class TestRunIterationOrdering:
+    @patch("oxpy_utils.vmmc_umbrella.auto_reweight.VmmcReplicas")
+    def test_order_parameters_added_before_build_replica(self, mock_replicas_cls, tmp_path):
+        # Regression test: build_replica implementations typically call sim.build(...),
+        # and VirtualMoveMonteCarlo.build() asserts a bond order parameter is already set
+        # (it writes the op file as part of building). If order parameters were added
+        # *after* build_replica ran, that assertion would fail.
+        ar = _make_ar(tmp_path)
+        ar.build_start_weights = lambda vmmc: None   # sidestep the real generate_weights()
+
+        call_order = []
+        vmmc = MagicMock()
+        vmmc.weights = np.ones(3)
+        vmmc.input = {"print_energy_every": 100}
+        vmmc.add_order_parameter.side_effect = lambda op: call_order.append("add_order_parameter")
+
+        mock_replicas_cls.return_value = _mock_replica_group(vmmc)
+
+        def build_replica(reweighter, sim):
+            call_order.append("build_replica")
+        ar.build_replica = build_replica
+
+        ar.run_iteration()
+
+        assert "add_order_parameter" in call_order
+        assert "build_replica" in call_order
+        assert call_order.index("add_order_parameter") < call_order.index("build_replica")
+
+    @patch("oxpy_utils.vmmc_umbrella.auto_reweight.VmmcReplicas")
+    def test_op_file_cleared_before_final_write(self, mock_replicas_cls, tmp_path):
+        # Regression test: build_replica's sim.build(...) already writes the op file once
+        # (OrderParameter.write appends); the trailing build_vmmc_op_file() call in
+        # run_iteration must clear it first or every order-parameter block gets duplicated.
+        ar = _make_ar(tmp_path)
+        ar.build_start_weights = lambda vmmc: None
+
+        vmmc = MagicMock()
+        vmmc.weights = np.ones(3)
+        vmmc.input = {"print_energy_every": 100}
+
+        mock_replicas_cls.return_value = _mock_replica_group(vmmc)
+        ar.build_replica = lambda reweighter, sim: None
+
+        ar.run_iteration()
+
+        vmmc.build_vmmc_op_file.assert_called_once_with(clear_file=True)
+
+    @patch("oxpy_utils.vmmc_umbrella.auto_reweight.VmmcReplicas")
+    def test_illegal_state_weight_applied_on_first_iteration(self, mock_replicas_cls, tmp_path):
+        ar = _make_ar(tmp_path)
+        ar.filter_legal_states = lambda states: [s for s in states if s != (2,)]
+        ar.illegal_state_weight = 0.0
+        ar.build_start_weights = lambda vmmc: None   # leave weights at their initial np.ones(3)
+
+        vmmc = MagicMock()
+        vmmc.weights = np.ones(3)
+        vmmc.input = {"print_energy_every": 100}
+        mock_replicas_cls.return_value = _mock_replica_group(vmmc)
+        ar.build_replica = lambda reweighter, sim: None
+
+        ar.run_iteration()
+
+        assert vmmc.weights[2] == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# describe_state_space
+# ---------------------------------------------------------------------------
+
+class TestDescribeStateSpace:
+    def test_counts_with_no_filters(self, tmp_path):
+        # _bond_op() default: 4 unique nucleotides -> states 0, 1, 2, all possible/legal/desired
+        ar = _make_ar(tmp_path)
+        summary = ar.describe_state_space(verbose=False)
+        assert summary["possible"] == 3
+        assert summary["legal"] == 3
+        assert summary["desired"] == 3
+
+    def test_defaults_breakdown_to_primary_bond_op(self, tmp_path):
+        ar = _make_ar(tmp_path)
+        summary = ar.describe_state_space(verbose=False)
+        assert summary["breakdown"] == {0: 1, 1: 1, 2: 1}
+
+    def test_breakdown_by_name(self, tmp_path):
+        ar = _make_ar(tmp_path)
+        summary = ar.describe_state_space(breakdown_op="bonds", verbose=False)
+        assert summary["breakdown"] == {0: 1, 1: 1, 2: 1}
+
+    def test_filters_shrink_legal_and_desired(self, tmp_path):
+        ar = _make_ar(tmp_path)
+        ar.filter_legal_states = lambda states: [s for s in states if s[0] != 2]
+        ar.filter_desired_states = lambda states: [s for s in states if s[0] == 0]
+        summary = ar.describe_state_space(verbose=False)
+        assert summary["possible"] == 3
+        assert summary["legal"] == 2
+        assert summary["desired"] == 1
+
+    def test_verbose_does_not_raise(self, tmp_path, capsys):
+        ar = _make_ar(tmp_path)
+        ar.describe_state_space(verbose=True)
+        assert "legal states" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# check_energy_print_budget
+# ---------------------------------------------------------------------------
+
+class TestCheckEnergyPrintBudget:
+    def test_passes_with_ample_budget(self, tmp_path):
+        ar = _make_ar(tmp_path)   # 3 desired states, n_reps=5 (default), steps_per_iter=1e8 (default)
+        ar.check_energy_print_budget(1e5)   # should not raise
+
+    def test_raises_when_budget_too_small(self, tmp_path):
+        ar = _make_ar(tmp_path)
+        # n_reps=5, steps_per_iter=1e8 -> 5e8 total steps; print_energy_every=1e9 -> 0.5 prints
+        with pytest.raises(ValueError, match="Energy print budget too small"):
+            ar.check_energy_print_budget(1e9)
+
+    def test_boundary_equal_to_desired_count_does_not_raise(self, tmp_path):
+        ar = _make_ar(tmp_path)
+        ar.n_reps = 1
+        ar.steps_per_iter = 3
+        # 1 replica * 3 steps / print_every=1 -> exactly 3 prints == 3 desired states
+        ar.check_energy_print_budget(1)
+
+
+# ---------------------------------------------------------------------------
+# get_overall_unwt_occ
+# ---------------------------------------------------------------------------
+
+def _mock_sim_with_vmmc_df(occ_by_state: dict) -> MagicMock:
+    """
+    Mock sim whose analysis.vmmc_df is indexed by state, matching the real shape (see
+    VmmcAnalysis.read_vmmc_op_data: df.set_index(op_cols) -- the order parameter value(s)
+    are the index, there is no op-name column). Keys may be bare ints (single order
+    parameter) or tuples (multiple order parameters).
+    """
+    df = pd.DataFrame(
+        {"unwt_occ": list(occ_by_state.values())},
+        index=list(occ_by_state.keys()),
+    )
+    mock = MagicMock()
+    mock.analysis.vmmc_df = df
+    return mock
+
+
+class TestGetOverallUnwtOcc:
+    def test_real_vmmc_df_single_op(self, tmp_path):
+        # Regression test: vmmc_df is indexed by state, not by an op-name column --
+        # get_overall_unwt_occ must read the state from the row's index label.
+        ar = _make_ar(tmp_path)
+        sim = _mock_sim_with_vmmc_df({0: 10.0, 1: 40.0, 2: 50.0})
+        result = ar.get_overall_unwt_occ([sim])
+        np.testing.assert_allclose(result, [10.0 / 50.0, 40.0 / 50.0, 1.0])
+
+    def test_sums_across_replicas(self, tmp_path):
+        ar = _make_ar(tmp_path)
+        sim1 = _mock_sim_with_vmmc_df({0: 10.0, 1: 0.0, 2: 0.0})
+        sim2 = _mock_sim_with_vmmc_df({0: 0.0, 1: 10.0, 2: 0.0})
+        result = ar.get_overall_unwt_occ([sim1, sim2])
+        np.testing.assert_allclose(result, [1.0, 1.0, 0.0])
+
+    def test_multi_op_tuple_index(self, tmp_path):
+        ar = VMMCAutoReweight(tmp_path)
+        ar.add_order_parameter(_bond_op())
+        ar.add_order_parameter(OrderParameter("dist", "mindistance", [(0, 5)], interfaces=[3.]))
+        ar.extrapolate_hist_Ts = ["30C"]
+        ar.build_replica = lambda meta, sim: None
+        sim = _mock_sim_with_vmmc_df({(0, 0): 5.0, (1, 0): 10.0, (2, 1): 10.0})
+        result = ar.get_overall_unwt_occ([sim])
+        assert result[0, 0] == pytest.approx(0.5)
+        assert result[1, 0] == pytest.approx(1.0)
+        assert result[2, 1] == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +385,25 @@ class TestComputeNextItWeights:
         mock_occ.return_value = unwt_occ
         result = ar.compute_next_it_weights(mock_it)
         assert result.shape == (3,)     # len(bond_op) = 3
+
+    @patch.object(VMMCAutoReweight, 'get_overall_unwt_occ')
+    def test_illegal_state_gets_default_sentinel(self, mock_occ, tmp_path):
+        ar, mock_it, unwt_occ = self._ar_and_it(tmp_path, [1., 1., 1.], [0.5, 1.0, 0.5])
+        ar.filter_legal_states = lambda states: [s for s in states if s != (2,)]
+        mock_occ.return_value = unwt_occ
+        result = ar.compute_next_it_weights(mock_it)
+        assert result[2] == pytest.approx(1.0)   # default illegal_state_weight
+
+    @patch.object(VMMCAutoReweight, 'get_overall_unwt_occ')
+    def test_illegal_state_respects_custom_illegal_state_weight(self, mock_occ, tmp_path):
+        # Regression test: illegal states must be forced to illegal_state_weight on every
+        # call, not just carried over from the previous iteration's weights.
+        ar, mock_it, unwt_occ = self._ar_and_it(tmp_path, [1., 1., 5.], [0.5, 1.0, 0.0])
+        ar.filter_legal_states = lambda states: [s for s in states if s != (2,)]
+        ar.illegal_state_weight = 0.0
+        mock_occ.return_value = unwt_occ
+        result = ar.compute_next_it_weights(mock_it)
+        assert result[2] == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +505,53 @@ class TestGetSamplingSdFiltered:
         sims = [_mock_sim_with_stats([33.0, 33.0, 34.0])]
         result = ar.get_sampling_std_filtered(sims)
         assert isinstance(result, float)
+
+    def test_works_with_state_indexed_statistics(self, tmp_path):
+        # Regression test: statistics is indexed by state (see
+        # calculate_sampling_and_probabilities), not by an op-name column.
+        # state_is_accessible must read the state from row.name, not row[op.name].
+        ar = _make_ar(tmp_path)
+        sim = _mock_sim_with_indexed_stats({0: 33.3, 1: 33.3, 2: 33.4})
+        result = ar.get_sampling_std_filtered([sim])
+        assert result == pytest.approx(np.std([33.3, 33.3, 33.4]), rel=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# check_result
+# ---------------------------------------------------------------------------
+
+class TestCheckResult:
+    def test_true_when_all_desired_sampled_and_std_low(self, tmp_path):
+        ar = _make_ar(tmp_path)   # single bond op "bonds": states (0,), (1,), (2,) all desired
+        ar.max_rel_std = 100.0
+        sim = _mock_sim_with_indexed_stats({0: 33.3, 1: 33.3, 2: 33.4})
+        assert ar.check_result([sim]) == True
+
+    def test_false_when_a_desired_state_unsampled(self, tmp_path, capsys):
+        ar = _make_ar(tmp_path)
+        sim = _mock_sim_with_indexed_stats({0: 0.0, 1: 50.0, 2: 50.0})
+        assert ar.check_result([sim]) == False
+        assert "not sampled" in capsys.readouterr().out
+
+    def test_false_when_std_too_high(self, tmp_path):
+        ar = _make_ar(tmp_path)
+        ar.max_rel_std = 0.01   # effectively impossible to satisfy
+        sim = _mock_sim_with_indexed_stats({0: 10.0, 1: 40.0, 2: 50.0})
+        assert ar.check_result([sim]) == False
+
+    def test_multi_op_tuple_state_index(self, tmp_path):
+        ar = VMMCAutoReweight(tmp_path)
+        ar.add_order_parameter(_bond_op())
+        ar.add_order_parameter(OrderParameter("dist", "mindistance", [(0, 5)], interfaces=[3.]))
+        ar.extrapolate_hist_Ts = ["30C"]
+        ar.build_replica = lambda meta, sim: None
+        ar.max_rel_std = 100.0
+        # dist > 0 states are always excluded from "desired" -- only the dist=0 states matter
+        sim = _mock_sim_with_indexed_stats({
+            (0, 0): 20.0, (1, 0): 20.0, (2, 0): 20.0,
+            (0, 1): 0.0, (1, 1): 0.0, (2, 1): 0.0,
+        })
+        assert ar.check_result([sim]) == True
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +705,24 @@ def _mock_sim_with_energy_df(state_seq: list[tuple[int, ...]], op_name: str = "b
     return mock
 
 
+def _mock_sim_with_op_trajectory(state_seq: list[tuple[int, ...]], obs_name: str = "op_trajectory") -> MagicMock:
+    """
+    Return a mock sim whose analysis.observable_data(obs_name) mimics the raw,
+    unnamed-column DataFrame produced by build_op_trajectory_observable + Analysis.observable_data:
+    column 0 is the step, column 1 is the (single) order parameter's value.
+    """
+    raw = pd.DataFrame({
+        0: list(range(len(state_seq))),
+        1: [s[0] for s in state_seq],
+    })
+    mock = MagicMock()
+    mock.analysis.observable_data.return_value = raw
+    # energy_df deliberately left as an unconfigured MagicMock/attribute: it must
+    # not be touched when op_trajectory_name is set.
+    mock.weights = np.ones(3)
+    return mock
+
+
 class TestVMMCGraphReweightInit:
     def test_inherits_auto_reweight(self, tmp_path):
         gr = VMMCGraphReweight(tmp_path)
@@ -437,6 +731,43 @@ class TestVMMCGraphReweightInit:
     def test_has_pseudo_count(self, tmp_path):
         gr = VMMCGraphReweight(tmp_path)
         assert gr.graph_pseudo_count == pytest.approx(1.0)
+
+    def test_op_trajectory_name_defaults_to_none(self, tmp_path):
+        gr = VMMCGraphReweight(tmp_path)
+        assert gr.op_trajectory_name is None
+
+
+class TestVMMCGraphReweightOpTrajectorySource:
+    """
+    When op_trajectory_name is set, compute_next_it_weights must read transitions from
+    sim.analysis.observable_data(name) instead of energy_df.
+    """
+
+    def test_uses_observable_data_not_energy_df(self, tmp_path):
+        gr = _make_gr(tmp_path)
+        gr.op_trajectory_name = "op_trajectory"
+        seq = [(0,), (1,), (2,), (1,), (0,)]
+        sim = _mock_sim_with_op_trajectory(seq, obs_name="op_trajectory")
+
+        result = gr.compute_next_it_weights([sim])
+
+        sim.analysis.observable_data.assert_called_once_with("op_trajectory")
+        assert result.shape == (3,)
+
+    def test_matches_energy_df_result_for_equivalent_sequence(self, tmp_path):
+        # Same underlying state sequence via either source should give the same weights
+        seq = ([(0,), (1,)] * 10) + ([(1,), (2,)] * 10) + [(2,), (1,)] * 2
+
+        gr_energy = _make_gr(tmp_path)
+        sim_energy = _mock_sim_with_energy_df(seq)
+        result_energy = gr_energy.compute_next_it_weights([sim_energy])
+
+        gr_traj = _make_gr(tmp_path)
+        gr_traj.op_trajectory_name = "op_trajectory"
+        sim_traj = _mock_sim_with_op_trajectory(seq)
+        result_traj = gr_traj.compute_next_it_weights([sim_traj])
+
+        np.testing.assert_allclose(result_energy, result_traj)
 
 
 class TestVMMCGraphReweightComputeWeights:
@@ -517,3 +848,170 @@ class TestVMMCGraphReweightComputeWeights:
         ratio_high = result_high[0] / result_high[1]
         ratio_low = result_low[0] / result_low[1]
         assert ratio_high < ratio_low
+
+    @patch.object(VMMCGraphReweight, 'get_overall_unwt_occ')
+    def test_illegal_state_respects_custom_weight(self, mock_occ, tmp_path):
+        # Regression test: illegal states must be forced to illegal_state_weight even though
+        # they're outside legal_states -- they're never touched by the graph solve at all, so
+        # without this they'd just carry over last iteration's weight unchanged.
+        gr = _make_gr(tmp_path)
+        gr.filter_legal_states = lambda states: [s for s in states if s != (2,)]
+        gr.illegal_state_weight = 0.0
+        mock_occ.return_value = np.array([0.5, 1.0, 0.0])
+        seq = [(0,), (1,), (0,), (1,)] * 5
+        sim = _mock_sim_with_energy_df(seq)
+        sim.weights = np.array([1.0, 1.0, 5.0])
+        result = gr.compute_next_it_weights([sim])
+        assert result[2] == pytest.approx(0.0)
+
+    @patch.object(VMMCGraphReweight, 'get_overall_unwt_occ')
+    def test_never_sampled_desired_state_boosted_off_previous_weight(self, mock_occ, tmp_path):
+        # Regression test: a desired state with unreliable (near-zero) observed occupancy
+        # gives the graph solve no real signal (every edge touching it defaults to
+        # log(eps/eps)=0), so it must be floored at an escalated version of its *previous*
+        # weight -- not left to whatever the graph solve happens to compute for it.
+        seq = [(1,), (2,), (1,), (2,)] * 5   # state 0 never appears in the trajectory at all
+        mock_occ.return_value = np.array([0.0, 0.5, 1.0])   # state 0 truly unsampled
+
+        gr_small = _make_gr(tmp_path)
+        gr_small.undersampled_boost_factor = 2.0
+        sim_small = _mock_sim_with_energy_df(seq)
+        sim_small.weights = np.array([3.0, 1.0, 1.0])
+        result_small = gr_small.compute_next_it_weights([sim_small])
+
+        gr_big = _make_gr(tmp_path)
+        gr_big.undersampled_boost_factor = 20.0
+        sim_big = _mock_sim_with_energy_df(seq)
+        sim_big.weights = np.array([3.0, 1.0, 1.0])
+        result_big = gr_big.compute_next_it_weights([sim_big])
+
+        # state 0 (boosted) vs state 1 (set purely by the graph solve, independent of
+        # undersampled_boost_factor): their ratio should scale linearly with the factor
+        ratio_small = result_small[0] / result_small[1]
+        ratio_big = result_big[0] / result_big[1]
+        assert ratio_big > ratio_small
+        assert ratio_big / ratio_small == pytest.approx(20.0 / 2.0, rel=0.05)
+
+    @patch.object(VMMCGraphReweight, 'get_overall_unwt_occ')
+    def test_undersampled_boost_does_not_override_a_higher_graph_solve(self, mock_occ, tmp_path):
+        # Regression test for the max()-floor (not override): if the graph solve already
+        # landed on something higher than the escalated floor, keep it -- don't clobber a
+        # reasonable estimate with a smaller one.
+        gr = _make_gr(tmp_path)
+        gr.undersampled_boost_factor = 1.01   # tiny boost, easily beaten by the graph solve
+        # heavy 2->1 flow (state 2 draining into state 1) means the solve wants w[2] > w[1]
+        seq = [(0,), (1,)] + ([(2,), (1,)] * 20)
+        mock_occ.return_value = np.array([0.5, 1.0, 1e-4])   # state 2 below the 1e-3 threshold
+        sim = _mock_sim_with_energy_df(seq)
+        sim.weights = np.array([1.0, 1.0, 1.0])
+        result = gr.compute_next_it_weights([sim])
+        # graph solve should push state 2 well above a mere 1.01x floor
+        assert result[2] > 1.01
+
+
+# ---------------------------------------------------------------------------
+# plot_iteration_weights
+# ---------------------------------------------------------------------------
+
+class TestPlotIterationWeights:
+    """
+    Real (unmocked) VirtualMoveMonteCarlo objects: order parameters and weights don't need
+    sim_dir to exist on disk, so these exercise the real plot_weights() call plot_iteration_weights
+    makes, which is what actually broke (passing (None,) where an int/str identifier is required).
+    """
+
+    def test_single_bond_op_does_not_raise(self, tmp_path):
+        ar = _make_ar(tmp_path)   # single bond op "bonds", 3 states
+        sim = VirtualMoveMonteCarlo(tmp_path / "iteration_0" / "rep1")
+        sim.add_order_parameter(_bond_op())
+        ar._subgroups.append([sim])   # minimal stand-in for a VmmcReplicas: index 0 -> sim
+
+        fig, ax = plt.subplots()
+        result = ar.plot_iteration_weights(iteration=-1, ax=ax)
+        plt.close(fig)
+        assert result is None   # ax was supplied, so no new figure is returned
+
+    def test_two_bond_ops_with_dist_op_does_not_raise(self, tmp_path):
+        ar = VMMCAutoReweight(tmp_path)
+        ar.add_order_parameter(_bond_op("a"))
+        ar.add_order_parameter(_bond_op("b"))
+        ar.add_order_parameter(OrderParameter("dist", "mindistance", [(0, 5)], interfaces=[3.]))
+        ar.extrapolate_hist_Ts = ["30C"]
+        ar.build_replica = lambda meta, sim: None
+
+        sim = VirtualMoveMonteCarlo(tmp_path / "iteration_0" / "rep1")
+        for op in ar.order_parameters():
+            sim.add_order_parameter(op)
+        ar._subgroups.append([sim])
+
+        fig, ax = plt.subplots()
+        ar.plot_iteration_weights(iteration=-1, ax=ax)
+        plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# plot_bond_curves
+# ---------------------------------------------------------------------------
+
+def _replicas_with_sims(tmp_path, sims: list) -> VmmcReplicas:
+    """Real VmmcReplicas wrapping already-constructed sims, bypassing .init()."""
+    replicas = VmmcReplicas(tmp_path, tmp_path, len(sims))
+    replicas.simulations = sims
+    return replicas
+
+
+class TestPlotBondCurves:
+    def test_valid_bond_op_index_does_not_raise(self, tmp_path):
+        ar = _make_ar(tmp_path)   # single bond op "bonds", 3 states
+        sim = VirtualMoveMonteCarlo(tmp_path / "iteration_0" / "rep1")
+        sim.add_order_parameter(_bond_op())
+        sim.analysis._energy_df = pd.DataFrame({"time": [0, 1, 2], "bonds": [0, 1, 2]})
+        ar._subgroups.append(_replicas_with_sims(tmp_path, [sim]))
+
+        fig, ax = plt.subplots()
+        ar.plot_bond_curves(subgroup_idx=-1, bond_op_index=0, ax=ax)
+        plt.close(fig)
+
+    def test_out_of_range_bond_op_index_raises_value_error(self, tmp_path):
+        # Regression test: the bounds check used to call self[0].num_ops() -- but self[0]
+        # is a VmmcReplicas (an iteration container), which has no num_ops() method at all
+        # (that's a VirtualMoveMonteCarlo method). Also, the check ran *after*
+        # self.bond_ops()[bond_op_index], so even fixing just that, a real out-of-range
+        # index raised IndexError before the intended ValueError check was ever reached.
+        ar = _make_ar(tmp_path)
+        sim = VirtualMoveMonteCarlo(tmp_path / "iteration_0" / "rep1")
+        sim.add_order_parameter(_bond_op())
+        ar._subgroups.append(_replicas_with_sims(tmp_path, [sim]))
+
+        with pytest.raises(ValueError, match="out of range"):
+            ar.plot_bond_curves(subgroup_idx=-1, bond_op_index=5)
+
+
+# ---------------------------------------------------------------------------
+# plot_free_energy_profile
+# ---------------------------------------------------------------------------
+
+class TestPlotFreeEnergyProfile:
+    def test_gracefully_skips_desired_states_absent_from_data(self, tmp_path):
+        # Regression test: used to do df.iloc[indexer] (positional row selection) instead of
+        # a label/state-value based selection. Raised IndexError whenever a desired state
+        # was absent from this run's data (e.g. never sampled, so it has no row at all after
+        # the groupby in get_data_over) rather than gracefully skipping it.
+        ar = _make_ar(tmp_path)   # bond op "bonds": states 0, 1, 2 all desired by default
+
+        sim = VirtualMoveMonteCarlo(tmp_path / "iteration_0" / "rep1")
+        op = _bond_op()
+        sim.add_order_parameter(op)
+        # state 2 never sampled -- absent from vmmc_df entirely, not even a zero row
+        sim.analysis._vmmc_df = pd.DataFrame(
+            {"unwt_occ": [10.0, 20.0], "wt_occ": [1.0, 2.0]},
+            index=pd.Index([0, 1], name="bonds"),
+        )
+        # get_data_over() also stamps a `step` (from current_step(), which reads real
+        # trajectory files off disk) onto its VMMCData -- irrelevant to the .df selection
+        # logic under test here, so stub it out rather than building real oxDNA output.
+        sim.analysis.current_step = lambda: 0.0
+        ar._subgroups.append(_replicas_with_sims(tmp_path, [sim]))
+
+        fig = ar.plot_free_energy_profile(op=op, iteration=-1)   # should not raise
+        plt.close(fig)

@@ -449,9 +449,15 @@ class VmmcAnalysis(Analysis):
         if bond_op is None:
             bond_op = self.sim.bond_op
         if states_to_visualize is None:
-            states_to_visualize = list(itertools.product([range(len(op)) for op in self.sim.list_order_parameters()]))
+            # unpack (*) each op's range so product() combines them, rather than treating
+            # the list of ranges as a single one-element iterable
+            states_to_visualize = list(itertools.product(*[range(len(op)) for op in self.sim.list_order_parameters()]))
         if colors is None:
             colors = generate_distinct_colors(len(bond_op))
+        # fig is only created (and only needs returning) when we made our own axes; the
+        # caller-supplied-ax path (e.g. VMMCAutoReweight.visualize()'s pie-chart grid) has
+        # no figure of its own to hand back
+        fig = None
         if ax is None:
             fig, ax = plt.subplots()
         # Find the index of the bond_op in the simulation's order parameters
@@ -1214,9 +1220,14 @@ class VirtualMoveMonteCarlo(Simulation):
         elif bond_op is None:
             bond_op = self.bond_op
         possible_bonds, = zip(*possible_states(bond_op))
+        n = len(possible_bonds)
         weights = np.full(shape=len(bond_op), fill_value=1.)
-        weights[possible_bonds[1:],] = [
-            increase_factor**(len(possible_bonds)-(i+1)) for i in range(1,len(possible_bonds))]
+        # rank 0 (fewest bonds, e.g. fully melted) gets the largest weight; the last rank
+        # (most bonds, e.g. fully formed) is baseline (factor**0=1). Previously this loop was
+        # range(1, n), silently skipping rank 0 and leaving it at the raw fill value of 1.0
+        # -- identical to the *least*-biased state instead of the most.
+        weights[possible_bonds,] = [
+            increase_factor ** (n - 1 - rank) for rank in range(n)]
         return weights
 
     def build_com_hb_observable(self, p1: str, p2: str, print_every: int = 1e3):
@@ -1242,6 +1253,32 @@ class VirtualMoveMonteCarlo(Simulation):
             print(observable.file_name)
             self.analysis.observables[observable._file_name] = observable
             self.add_observable(observable)
+
+    def build_op_trajectory_observable(self, print_every: Union[int, float], name: str = "op_trajectory") -> str:
+        """
+        Adds an observable that records the step and the value of every order parameter
+        every `print_every` steps, independent of print_energy_every.
+
+        energy_df's order-parameter columns are only refreshed every print_energy_every
+        steps, which at large print_energy_every can be too coarse to resolve individual
+        VMMC state transitions. Each line here is just the step plus one small integer
+        per order parameter, so it's cheap to sample this much more often than the
+        energy file, giving a more faithful transition time series (e.g. for
+        VMMCGraphReweight).
+
+        :param print_every: step interval at which to record order parameter values
+        :param name: observable name (and output file basename); read back later via
+            self.analysis.observable_data(name)
+        :return: the observable name, for convenience
+        """
+        assert self.list_order_parameters(), "No order parameters defined!"
+        observable = Observable(name,
+                                print_every,
+                                ObservableColumn("step"),
+                                ObservableColumn("order_parameters"))
+        self.analysis.observables[name] = observable
+        self.add_observable(observable)
+        return name
 
     @property
     def parallel_tampering(self) -> bool:

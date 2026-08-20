@@ -2688,7 +2688,7 @@ class SimFiles(SimulationComponent):
         else:
             return hasattr(self, item)
 
-class SimBuildException(Exception, SimulationComponent):
+class SimBuildException(Exception, SimulationComponent, ABC):
     """
     base class for exceptions involving building a simulation.
     I've chosen not to make this an abstract class but generally it's better
@@ -2737,13 +2737,7 @@ def find_top_file(directory: Path, sim: Union[Simulation, None] = None) -> Path:
     try:
         return [file for file in directory.iterdir() if file.name.endswith('.top')][0]
     except IndexError:
-        if sim is not None:
-            print(f"No file ending in .top in directory {str(directory)}")
-            raise SimBuildException(sim, "topology file")
-        else:
-            raise FileNotFoundError(errno.ENOENT,
-                                    os.strerror(errno.ENOENT),
-                                    f"No valid .top file found in directory {str(directory)}")
+        raise FileNotFoundError(f"No valid .top file found in directory {str(directory)}")
 
 
 def find_conf_file(directory: Path, sim: Union[Simulation, None] = None) -> Path:

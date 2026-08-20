@@ -7,7 +7,6 @@ import shutil
 import tempfile
 import threading
 import time
-import warnings
 from abc import ABC, abstractmethod
 from numbers import Number
 from pathlib import Path
@@ -29,6 +28,7 @@ from pandas.errors import EmptyDataError
 import json
 
 from oxDNA_analysis_tools.UTILS.boilerplate import PathContext
+from .auto_reweight import VMMCAutoReweight
 from .metasimulation import VMMCMetaSimulation
 from .vmmc import VirtualMoveMonteCarlo
 from .vmmc_replicas import VmmcReplicas, _replica_colors
@@ -58,6 +58,9 @@ class VmmcWindow(VmmcReplicas):
         """
         super().__init__(starting_conf, sim_dir, n_replicas)
         self.state_space_area = state_space_area
+
+    def load(self):
+        super().load()
 
     def merge_hist(self) -> pd.DataFrame:
         return functools.reduce(lambda x, y: x.add(y, fill_value=0),
@@ -245,7 +248,22 @@ class VmmcWindowing(VMMCMetaSimulation):
         """
         raise NotImplementedError("Subclasses must implement get_data method.")
 
-    def load(self, ignore_no_json: bool = False):
+    def load(self,
+             ignore_no_json: bool = False,
+             splice_reweighted: bool = False,
+             reweight_tld: Optional[Path] = None):
+        """
+        :param ignore_no_json: if True, don't raise when no setup.json is found (leaves
+            existing windows, if any, untouched)
+        :param splice_reweighted: if True, after loading the raw windows, replace each
+            window that has a corresponding per-window VMMCAutoReweight run on disk with
+            that run's final, converged iteration (see VmmcWindowedAutoReweight). Windows
+            without a matching reweighted run are left as the raw, single-shot data.
+        :param reweight_tld: directory containing the per-window `window_{i}` reweighting
+            runs, as written by `VmmcWindowedAutoReweight(windowing, reweight_tld)`.
+            Defaults to `self.tld / "reweighted"`, the same default VmmcWindowedAutoReweight
+            uses. Only consulted when splice_reweighted is True.
+        """
         if (self.tld / "setup.json").exists():
             with (self.tld / "setup.json").open("r") as f:
                 settings = json.load(f)
@@ -266,46 +284,51 @@ class VmmcWindowing(VMMCMetaSimulation):
             raise FileNotFoundError(f"No setup.json found in directory {str(self.tld)}")
 
         for window in self:
-            if window.sim_dir.exists():
-                window.init()
-                for sim in window:
-                    sim.input.read_input()
-                    sim.read_order_parameters()
-                    sim.load_weights()
-                sims = list(window)
-                if len(sims) > 1:
-                    ref_weights = sims[0].weights
-                    mismatched_details = []
-                    for i, sim in enumerate(sims[1:], start=1):
-                        if not np.allclose(sim.weights, ref_weights, rtol=1e-9, equal_nan=True):
-                            diff_idx = np.argwhere(~np.isclose(sim.weights, ref_weights, rtol=1e-9, equal_nan=True))
-                            lines = [
-                                f"state {tuple(int(x) for x in idx)}: replica_0={ref_weights[tuple(idx)]}, replica_{i}={sim.weights[tuple(idx)]}"
-                                for idx in diff_idx[:10]
-                            ]
-                            if len(diff_idx) > 10:
-                                lines.append(f"... and {len(diff_idx) - 10} more differing state(s)")
-                            mismatched_details.append(
-                                f"  replica {i} ({len(diff_idx)} differing state(s)):\n    " + "\n    ".join(lines)
-                            )
-                        elif not np.array_equal(sim.weights, ref_weights):
-                            diff_idx = np.argwhere(sim.weights != ref_weights)
-                            lines = [
-                                f"state {tuple(int(x) for x in idx)}: replica_0={repr(ref_weights[tuple(idx)])}, replica_{i}={repr(sim.weights[tuple(idx)])}"
-                                for idx in diff_idx[:10]
-                            ]
-                            if len(diff_idx) > 10:
-                                lines.append(f"... and {len(diff_idx) - 10} more")
-                            warnings.warn(
-                                f"Window {window.sim_dir.name}: replica {i} weights differ from replica 0 "
-                                f"within floating-point tolerance ({len(diff_idx)} state(s)):\n    "
-                                + "\n    ".join(lines)
-                            )
-                    if mismatched_details:
-                        raise ValueError(
-                            f"Window {window.sim_dir.name}: weight mismatch between replicas:\n"
-                            + "\n".join(mismatched_details)
-                        )
+            window.load()
+
+        if splice_reweighted:
+            self._load_reweighted_windows(reweight_tld)
+
+    def _splice_window(self,
+                       window_idx: int,
+                       sim_dir: Path,
+                       simulations: list[VirtualMoveMonteCarlo]) -> None:
+        """
+        Replace the window at `window_idx` with a new VmmcWindow wrapping `simulations`
+        (typically the final iteration of a per-window VMMCAutoReweight run), preserving
+        the original window's state_space_area and starting_conf.
+        """
+        old_window = self[window_idx]
+        new_window = VmmcWindow(
+            sim_dir=sim_dir,
+            n_replicas=len(simulations),
+            state_space_area=old_window.state_space_area,
+            starting_conf=old_window.file_dir,
+        )
+        new_window.simulations = simulations
+        new_window.temperatures = self.extrapolate_hist_Ts
+        self._subgroups[window_idx] = new_window
+
+    def _load_reweighted_windows(self, reweight_tld: Optional[Path] = None):
+        """
+        For each window, if a per-window VMMCAutoReweight run exists on disk (default
+        location `self.tld / "reweighted" / f"window_{i}"`, as written by
+        VmmcWindowedAutoReweight), load its final iteration and splice it in. Windows
+        without a matching reweighted directory are left as-is.
+        """
+        base = Path(reweight_tld) if reweight_tld is not None else self.tld / "reweighted"
+        for i in range(len(self)):
+            window_dir = base / f"window_{i}"
+            if not window_dir.is_dir():
+                print(f"No reweighted data found for window {i} at {window_dir}, leaving as-is.")
+                continue
+            ar = VMMCAutoReweight(window_dir)
+            ar.load()
+            if len(ar) == 0:
+                print(f"No iterations found for window {i} at {window_dir}, leaving as-is.")
+                continue
+            final_it = ar[-1]
+            self._splice_window(i, final_it.sim_dir, list(final_it))
 
     def check_ready(self):
         covered_states = set()

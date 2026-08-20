@@ -8,7 +8,7 @@ and safe to use in unit tests.
 """
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -369,6 +369,115 @@ class TestCacheAndLoadSettings:
         w2 = VmmcWindowing(tmp_path)
         w2.load()
         assert w2.n_reps == 3
+
+
+# ---------------------------------------------------------------------------
+# VmmcWindowing._splice_window
+# ---------------------------------------------------------------------------
+
+class TestSpliceWindow:
+    def test_replaces_subgroup_preserving_state_and_conf(self, tmp_path, bond_op):
+        w = VmmcWindowing(tmp_path)
+        w.add_order_parameter(bond_op)
+        w.extrapolate_hist_Ts = ["30C"]
+        w._subgroups = [_make_window(tmp_path, "window_0", {(0,), (1,)})]
+        w[0].file_dir = "some_starting_conf"
+
+        fake_sim = MagicMock()
+        w._splice_window(0, tmp_path / "new_sim_dir", [fake_sim, fake_sim])
+
+        new_window = w[0]
+        assert new_window.sim_dir == tmp_path / "new_sim_dir"
+        assert new_window.state_space_area == {(0,), (1,)}
+        assert new_window.file_dir == "some_starting_conf"
+        assert new_window.simulations == [fake_sim, fake_sim]
+
+
+# ---------------------------------------------------------------------------
+# VmmcWindowing.load(splice_reweighted=...)
+# ---------------------------------------------------------------------------
+
+class TestLoadSpliceReweighted:
+    def _cached_windowing(self, tmp_path, bond_op, areas) -> VmmcWindowing:
+        tmp_path.mkdir(exist_ok=True)
+        w = VmmcWindowing(tmp_path)
+        w.add_order_parameter(bond_op)
+        w.extrapolate_hist_Ts = ["30C"]
+        w._subgroups = [_make_window(tmp_path, f"window_{i}", area) for i, area in enumerate(areas)]
+        w.cache_settings()
+        return w
+
+    def test_flag_off_by_default_leaves_raw_windows(self, tmp_path, bond_op):
+        self._cached_windowing(tmp_path, bond_op, [{(0,), (1,), (2,)}])
+        w2 = VmmcWindowing(tmp_path)
+        w2.load()
+        assert w2[0].sim_dir == tmp_path / "window_0"
+
+    @patch("oxpy_utils.vmmc_umbrella.windowing.VMMCAutoReweight")
+    def test_splices_when_reweighted_dir_present(self, mock_ar_cls, tmp_path, bond_op):
+        self._cached_windowing(tmp_path, bond_op, [{(0,), (1,), (2,)}])
+        (tmp_path / "reweighted" / "window_0").mkdir(parents=True)
+
+        fake_sim = MagicMock()
+        fake_final_it = MagicMock()
+        fake_final_it.sim_dir = tmp_path / "reweighted" / "window_0" / "iteration_2"
+        fake_final_it.__iter__ = MagicMock(return_value=iter([fake_sim]))
+        fake_final_it.__len__ = MagicMock(return_value=1)
+        fake_ar = MagicMock()
+        fake_ar.__len__ = MagicMock(return_value=3)
+        fake_ar.__getitem__ = MagicMock(side_effect=lambda i: fake_final_it if i == -1 else None)
+        mock_ar_cls.return_value = fake_ar
+
+        w2 = VmmcWindowing(tmp_path)
+        w2.load(splice_reweighted=True)
+
+        mock_ar_cls.assert_called_once_with(tmp_path / "reweighted" / "window_0")
+        fake_ar.load.assert_called_once()
+        assert w2[0].sim_dir == fake_final_it.sim_dir
+        assert w2[0].simulations == [fake_sim]
+
+    @patch("oxpy_utils.vmmc_umbrella.windowing.VMMCAutoReweight")
+    def test_skips_window_without_reweighted_dir(self, mock_ar_cls, tmp_path, bond_op):
+        self._cached_windowing(tmp_path, bond_op, [{(0,), (1,), (2,)}])
+        w2 = VmmcWindowing(tmp_path)
+        w2.load(splice_reweighted=True)
+
+        mock_ar_cls.assert_not_called()
+        assert w2[0].sim_dir == tmp_path / "window_0"
+
+    @patch("oxpy_utils.vmmc_umbrella.windowing.VMMCAutoReweight")
+    def test_skips_window_with_no_iterations(self, mock_ar_cls, tmp_path, bond_op):
+        self._cached_windowing(tmp_path, bond_op, [{(0,), (1,), (2,)}])
+        (tmp_path / "reweighted" / "window_0").mkdir(parents=True)
+        fake_ar = MagicMock()
+        fake_ar.__len__ = MagicMock(return_value=0)
+        mock_ar_cls.return_value = fake_ar
+
+        w2 = VmmcWindowing(tmp_path)
+        w2.load(splice_reweighted=True)
+
+        assert w2[0].sim_dir == tmp_path / "window_0"
+
+    @patch("oxpy_utils.vmmc_umbrella.windowing.VMMCAutoReweight")
+    def test_respects_explicit_reweight_tld(self, mock_ar_cls, tmp_path, bond_op):
+        self._cached_windowing(tmp_path, bond_op, [{(0,), (1,), (2,)}])
+        custom_dir = tmp_path / "custom_reweight_loc"
+        (custom_dir / "window_0").mkdir(parents=True)
+
+        fake_sim = MagicMock()
+        fake_final_it = MagicMock()
+        fake_final_it.sim_dir = custom_dir / "window_0" / "iteration_0"
+        fake_final_it.__iter__ = MagicMock(return_value=iter([fake_sim]))
+        fake_final_it.__len__ = MagicMock(return_value=1)
+        fake_ar = MagicMock()
+        fake_ar.__len__ = MagicMock(return_value=1)
+        fake_ar.__getitem__ = MagicMock(side_effect=lambda i: fake_final_it if i == -1 else None)
+        mock_ar_cls.return_value = fake_ar
+
+        w2 = VmmcWindowing(tmp_path)
+        w2.load(splice_reweighted=True, reweight_tld=custom_dir)
+
+        mock_ar_cls.assert_called_once_with(custom_dir / "window_0")
 
 
 # ---------------------------------------------------------------------------

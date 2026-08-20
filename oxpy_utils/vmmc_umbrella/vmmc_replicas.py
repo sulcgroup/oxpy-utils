@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import itertools
+import warnings
 from pathlib import Path
 from typing import Union, Any, Optional
 
@@ -50,6 +51,54 @@ class VmmcReplicas(Replicas):
 
     temperatures = property(fget=lambda self: self._temperatures,
                             fset=lambda self, ts: self.set_temperatures(ts))
+
+    def load(self):
+        """
+        Load an already-built set of replicas from disk: initializes the
+        simulation objects and reads their input files, order parameters, and
+        weights, then verifies that all replicas share the same weights.
+        """
+        if not self.sim_dir.exists():
+            return
+        self.init()
+        for sim in self:
+            sim.input.read_input()
+            sim.read_order_parameters()
+            sim.load_weights()
+        sims = list(self)
+        if len(sims) > 1:
+            ref_weights = sims[0].weights
+            mismatched_details = []
+            for i, sim in enumerate(sims[1:], start=1):
+                if not np.allclose(sim.weights, ref_weights, rtol=1e-9, equal_nan=True):
+                    diff_idx = np.argwhere(~np.isclose(sim.weights, ref_weights, rtol=1e-9, equal_nan=True))
+                    lines = [
+                        f"state {tuple(int(x) for x in idx)}: replica_0={ref_weights[tuple(idx)]}, replica_{i}={sim.weights[tuple(idx)]}"
+                        for idx in diff_idx[:10]
+                    ]
+                    if len(diff_idx) > 10:
+                        lines.append(f"... and {len(diff_idx) - 10} more differing state(s)")
+                    mismatched_details.append(
+                        f"  replica {i} ({len(diff_idx)} differing state(s)):\n    " + "\n    ".join(lines)
+                    )
+                elif not np.array_equal(sim.weights, ref_weights):
+                    diff_idx = np.argwhere(sim.weights != ref_weights)
+                    lines = [
+                        f"state {tuple(int(x) for x in idx)}: replica_0={repr(ref_weights[tuple(idx)])}, replica_{i}={repr(sim.weights[tuple(idx)])}"
+                        for idx in diff_idx[:10]
+                    ]
+                    if len(diff_idx) > 10:
+                        lines.append(f"... and {len(diff_idx) - 10} more")
+                    warnings.warn(
+                        f"{self.sim_dir.name}: replica {i} weights differ from replica 0 "
+                        f"within floating-point tolerance ({len(diff_idx)} state(s)):\n    "
+                        + "\n    ".join(lines)
+                    )
+            if mismatched_details:
+                raise ValueError(
+                    f"{self.sim_dir.name}: weight mismatch between replicas:\n"
+                    + "\n".join(mismatched_details)
+                )
 
     def __init__(self, conf_source, sim_dir, n_replicas):
         """
@@ -538,6 +587,9 @@ class VmmcReplicas(Replicas):
         # grid for readability
         ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.7)
 
+        ax.set_xlabel(op.name)
+        ax.set_ylabel("Count")
+
         if make_new_fig:
             fig.show()
             return fig
@@ -598,6 +650,7 @@ class VmmcReplicas(Replicas):
             # ax.set_title(f"Bond Curves - Iteration {subgroup_idx if subgroup_idx >= 0 else len(self) + subgroup_idx}")
             plt.tight_layout()
             plt.show()
+            return fig
 
 
 class VmmcReplicasGroup(ReplicaGroup):

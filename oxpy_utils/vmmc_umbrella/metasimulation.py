@@ -224,11 +224,12 @@ class VMMCMetaSimulation(ABC):
 
         # Get replicas for this iteration
         replicas = self[subgroup_idx]
-        bond_op = self.bond_ops()[bond_op_index]
 
-        # Get the bond order parameter
-        if bond_op_index >= len(self[0].num_ops()):
+        # Bounds-check before indexing bond_ops(), not after: the raw IndexError from an
+        # out-of-range index would otherwise fire first and this check would never run
+        if bond_op_index >= len(self.bond_ops()):
             raise ValueError(f"bond_op_index {bond_op_index} out of range (only {len(self.bond_ops())} bond ops)")
+        bond_op = self.bond_ops()[bond_op_index]
         replicas.plot_op_val_curve(bond_op, ax, replica_colors, show_legend)
 
         return fig
@@ -303,10 +304,13 @@ class VMMCMetaSimulation(ABC):
             # use unweighted state occupancies to estimate sampling
             filtered_df: pd.DataFrame = sim.analysis.vmmc_df
 
-            # Extract the bond order parameter indices and unwt_occ values
-            for _, row in filtered_df.iterrows():
-                # Get the indices for this state from the bond_op columns
-                indices = tuple(int(row[op.name]) for op in self.order_parameters())
+            # Extract the bond order parameter indices and unwt_occ values. vmmc_df is
+            # indexed by the order parameter value(s) (see read_vmmc_op_data) -- idx *is*
+            # the state already, not something to look up a row column for. A single order
+            # parameter produces a plain (non-Multi) Index, so idx arrives as a bare scalar
+            # in that case.
+            for idx, row in filtered_df.iterrows():
+                indices = idx if isinstance(idx, tuple) else (idx,)
                 # Add the unweighted occupancy to the correct position
                 overall_unwt_occ[indices] += row['unwt_occ']
 
