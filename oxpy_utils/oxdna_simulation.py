@@ -1055,34 +1055,41 @@ class OxpyRun(SimulationComponent):
         with PathContext(self.sim.sim_dir):
             with open('input.json', 'r') as f:
                 my_input = loads(f.read())
-            with oxpy.Context():
-                ox_input = oxpy.InputFile()
-                for k, v in my_input.items():
-                    # todo: error-handling for vals that don't stringify nicely
-                    ox_input[k] = str(v)
-                try:
-                    # todo: there's a beautiful myriad of ways this can crash silently
-                    # out of CUDA memory being a notable one
-                    manager = oxpy.OxpyManager(ox_input)
-                    if hasattr(self.sim.sim_files, 'run_time_custom_observable'):
-                        with open(self.sim.sim_files.run_time_custom_observable, 'r') as f:
-                            self.my_obs = load(f)
-                        for key, value in self.my_obs.items():
-                            my_obs = [eval(observable_string, {"self": self}) for observable_string in value['observables']]
-                            manager.add_output(key, print_every=value['print_every'], observables=my_obs)
-                    manager.run_complete()
-                    del manager
-                except oxpy.OxDNAError as e:
-                    self.error_message = traceback.format_exc()
-                    raise e
-                except KeyboardInterrupt as e:
-                    self.error_message = 'KeyboardInterrupt'
-                except Exception as e:
-                    print('Unexpected python error')
-                    self.error_message = traceback.format_exc()
+            try:
+                with oxpy.Context():
+                    ox_input = oxpy.InputFile()
+                    for k, v in my_input.items():
+                        # todo: error-handling for vals that don't stringify nicely
+                        ox_input[k] = str(v)
+                    try:
+                        # todo: there's a beautiful myriad of ways this can crash silently
+                        # out of CUDA memory being a notable one
+                        manager = oxpy.OxpyManager(ox_input)
+                        if hasattr(self.sim.sim_files, 'run_time_custom_observable'):
+                            with open(self.sim.sim_files.run_time_custom_observable, 'r') as f:
+                                self.my_obs = load(f)
+                            for key, value in self.my_obs.items():
+                                my_obs = [eval(observable_string, {"self": self}) for observable_string in value['observables']]
+                                manager.add_output(key, print_every=value['print_every'], observables=my_obs)
+                        manager.run_complete()
+                        del manager
+                    except oxpy.OxDNAError as e:
+                        self.error_message = traceback.format_exc()
+                        raise e
+                    except KeyboardInterrupt as e:
+                        self.error_message = 'KeyboardInterrupt'
+                    except Exception as e:
+                        print('Unexpected python error')
+                        self.error_message = traceback.format_exc()
+            finally:
+                # Always restore the captured stdout/stderr, even when an OxDNAError
+                # propagates out of the try above. Without this, a raised OxDNAError skips
+                # straight past capture.reset(), leaving stdout/stderr redirected into the
+                # (now-abandoned) StdCaptureFD buffer — so the exception's own traceback,
+                # printed by Python's default handler, vanishes instead of being visible.
+                self.sim_output, self.sim_err = capture.reset()
 
             # grab captured err and outputs
-            self.sim_output, self.sim_err = capture.reset()
             toc = timeit.default_timer()
             if self.verbose:
                 print(f'Run time: {toc - tic}')
@@ -1426,9 +1433,7 @@ class SimulationManager:
                 if not self.terminate_queue.empty():
                     if run_when_failed is False:
                         simulation_error_message = self.terminate_queue.get()
-                        # Assuming OxDNAError exists in oxpy or define a placeholder
-                        class OxDNAError(Exception): pass
-                        self.handle_death(exception=OxDNAError, message=simulation_error_message)
+                        self.handle_death(exception=oxpy.OxDNAError, message=simulation_error_message)
                         # handle_death should exit or raise, otherwise this loop continues
                         break # Exit loop after handling death if handle_death returns
 
@@ -1566,7 +1571,13 @@ class SimulationManager:
             sim_mem = self.get_sim_mem(sim, gpu_idx)
             self.gpu_memory_queue.put(sim_mem)
 
-        sim.oxpy_run.run(subprocess=False, custom_observables=self.custom_observables)
+        try:
+            sim.oxpy_run.run(subprocess=False, custom_observables=self.custom_observables)
+        except oxpy.OxDNAError:
+            # run_complete() intentionally re-raises OxDNAError for direct/manual use of
+            # oxpy_run; here we're the manager's own worker process, so absorb it instead
+            # of letting it kill this process - error_message is already set below.
+            pass
         if sim.oxpy_run.error_message is not None:
             self.terminate_queue.put(
                 f'Simulation exception encountered in {sim.sim_dir}:\n{sim.oxpy_run.error_message}')

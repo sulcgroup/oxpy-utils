@@ -4,6 +4,8 @@ setup(
     name='oxpy_utils',
     version='0.1',
     packages=find_packages(),
+    include_package_data=True,
+    package_data={'oxpy_utils': ['defaults/inputs/*.json']},
     description='Utilities to use the oxDNA (via oxpy) in enhanced sampling and linked groups of simulations',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',

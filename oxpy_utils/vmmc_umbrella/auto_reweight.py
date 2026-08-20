@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import warnings
 from typing import Callable, Generator, Optional, Union
 
 import numpy as np
@@ -36,6 +37,10 @@ class VMMCAutoReweight(VMMCMetaSimulation):
 
     reweight_borders: Union[bool, float]
 
+    # directory containing the starting .top/.dat (and optionally op.txt/weights.txt)
+    # files used to build every iteration's replicas
+    starting_conf: Optional[Path]
+
     def __init__(self, tld_path: Path, sim_build_func: Optional[Callable] = None):
         """
         :param tld_path: path to top-level directory where iterations will be stored
@@ -53,6 +58,7 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         # different window") should set this to 0.0 -- VMMC's acceptance ratio makes a weight-0
         # state a hard exclusion, since w_new=0 always rejects the move.
         self.illegal_state_weight: float = 1.0
+        self.starting_conf = None
 
     def load(self):
         """
@@ -119,6 +125,8 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         def state_is_accessible(row):
             idx = row.name
             state_tuple = idx if isinstance(idx, tuple) else (idx,)
+            idx = row.name
+            state_tuple = idx if isinstance(idx, tuple) else (idx,)
             # Ignore states where any distance order parameter > 0
             if any(state_tuple[self.num_bond_ops():]):
                 return False
@@ -142,6 +150,86 @@ class VMMCAutoReweight(VMMCMetaSimulation):
             raise ValueError("No bond order parameters specified for reweighting!")
         if not self.build_replica:
             raise ValueError("No replica building function specified!")
+        if self.starting_conf is None:
+            raise ValueError("No starting_conf specified! Set self.starting_conf to a directory "
+                              "containing the starting .top/.dat files before calling run().")
+
+        if self.starting_conf is None:
+            raise ValueError("No starting_conf specified! Set self.starting_conf to a directory "
+                              "containing the starting .top/.dat files before calling run().")
+
+    def describe_state_space(self,
+                             breakdown_op: Optional[Union[str, int, OrderParameter]] = None,
+                             verbose: bool = True) -> dict:
+        """
+        Calculate the size of this reweighter's order-parameter state space: how many
+        (op1_val, op2_val, ...) combinations are physically possible, how many survive
+        filter_legal_states, and how many survive filter_desired_states (the flat-sampling
+        target). Useful for sanity-checking whether a run's step budget is even plausible
+        for covering desired_state_list before spending compute on it.
+
+        :param breakdown_op: optional order parameter (by name, index, or OrderParameter) to
+            break the legal-state count down by, one entry per value of that op. Defaults to
+            the primary bond order parameter (bond_ops()[0]) if any bond ops are set.
+        :param verbose: if True, print a human-readable summary
+        :return: dict with keys "possible", "legal", "desired", and "breakdown"
+            (a dict mapping op value -> legal-state count, in ascending op-value order)
+        """
+        ops = self.order_parameters()
+        all_states = possible_states(*ops)
+        legal_states = self.legal_state_list
+        desired_states = self.desired_state_list
+
+        if breakdown_op is None and self._bond_ops:
+            breakdown_op = self._bond_ops[0]
+
+        breakdown = None
+        if breakdown_op is not None:
+            if isinstance(breakdown_op, str):
+                op_idx = next(i for i, op in enumerate(ops) if op.name == breakdown_op)
+            elif isinstance(breakdown_op, OrderParameter):
+                op_idx = next(i for i, op in enumerate(ops) if op.name == breakdown_op.name)
+            else:
+                op_idx = breakdown_op
+            counts: dict[int, int] = {}
+            for state in legal_states:
+                counts[state[op_idx]] = counts.get(state[op_idx], 0) + 1
+            breakdown = dict(sorted(counts.items()))
+
+        summary = {
+            "possible": len(all_states),
+            "legal": len(legal_states),
+            "desired": len(desired_states),
+            "breakdown": breakdown,
+        }
+
+        if verbose:
+            print(f"possible states: {summary['possible']}")
+            print(f"legal states:    {summary['legal']}")
+            print(f"desired states:  {summary['desired']}")
+            if breakdown is not None:
+                op_name = ops[op_idx].name
+                for val, count in breakdown.items():
+                    print(f"  {op_name}={val}: {count} legal states")
+
+        return summary
+
+    def check_energy_print_budget(self, print_energy_every: Union[int, float]):
+        """
+        Raise if a single iteration won't produce enough energy-print statements (summed
+        across all replicas) to have even one data point per desired state -- a necessary
+        (not sufficient) condition for the reweighter to see transitions across the whole
+        desired state space within an iteration.
+        """
+        n_desired = len(self.desired_state_list)
+        n_prints = self.n_reps * self.steps_per_iter / print_energy_every
+        if n_prints < n_desired:
+            raise ValueError(
+                f"Energy print budget too small: {self.n_reps} replicas x {self.steps_per_iter:.3g} steps / "
+                f"print_energy_every={print_energy_every:.3g} = {n_prints:.1f} energy-print statements per "
+                f"iteration, but there are {n_desired} desired states to sample. Increase steps_per_iter, "
+                f"decrease print_energy_every, or shrink the desired state space."
+            )
 
     def describe_state_space(self,
                              breakdown_op: Optional[Union[str, int, OrderParameter]] = None,
@@ -238,7 +326,7 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         # construct new iteration
         # it = [VirtualMoveMonteCarlo(self._tld / f"iteration_{len(self)}" / f"replica_{i}") for i in
         #       range(self.n_reps)]
-        it = VmmcReplicas(self.tld / f"iteration_{len(self)}",  self.tld / f"iteration_{len(self)}", self.n_reps)
+        it = VmmcReplicas(self.starting_conf,  self.tld / f"iteration_{len(self)}", self.n_reps)
         it.init()
         it.temperatures = self.extrapolate_hist_Ts
         # apply settings. order parameters must be added before build_replica runs: most
@@ -699,6 +787,23 @@ class VMMCGraphReweight(VMMCAutoReweight):
     def __init__(self, tld_path: Path, sim_build_func: Optional[Callable] = None):
         super().__init__(tld_path, sim_build_func)
         self.graph_pseudo_count: float = 1.0
+        # Trust region: maximum |log-ratio| correction any single edge can contribute
+        # per iteration, regardless of what the observed transition data suggests.
+        # log(2) means an edge's weight ratio can move at most 2x in one iteration.
+        # See the note at the edge-construction loop in compute_next_it_weights for why
+        # this is needed even with graph_pseudo_count smoothing and cumulative history.
+        self.max_log_weight_step: float = np.log(2.0)
+        # Fallback for states flagged by the rare-crossing-event warning: how much of
+        # the freshly computed weight to adopt versus keep the previous iteration's
+        # weight, in log space (1.0 = fully adopt the new value, i.e. no extra damping;
+        # 0.0 = ignore the new evidence entirely). The per-edge cap above bounds how far
+        # any *one* edge's target can move the fit, but a sudden large influx of new
+        # visits for a previously ~unvisited state can still shift the *global*
+        # least-squares solution (and the subsequent min-renormalization) by more than
+        # that per-edge cap suggests. This adds a second, targeted damping specifically
+        # for states whose evidence just changed dramatically, so one lucky/unlucky
+        # iteration doesn't fully dictate the next iteration's bias for that state.
+        self.rare_event_damping: float = 0.5
         # name of the observable added via VirtualMoveMonteCarlo.build_op_trajectory_observable,
         # if any. When set, transition counts are read from it instead of energy_df.
         self.op_trajectory_name: Optional[str] = None
@@ -725,31 +830,99 @@ class VMMCGraphReweight(VMMCAutoReweight):
         legal_states = self.legal_state_list
         legal_set = set(legal_states)
 
-        # Count directed transitions between adjacent legal states
+        # Count directed transitions between adjacent legal states, and total
+        # visits to each state (needed to normalize transition counts into
+        # per-visit rates below — see note at the edge-construction loop).
+        #
+        # Accumulate over the ENTIRE run so far, not just last_it. TMMC's per-visit
+        # rates are only a low-noise estimator once enough samples have piled up;
+        # resetting to a single iteration's window every time means a rarely-visited
+        # state's rate is dominated by graph_pseudo_count smoothing every iteration,
+        # producing large iteration-to-iteration swings instead of settling down as
+        # more data comes in. self._subgroups already holds every completed
+        # iteration (including ones reloaded via load()), so accumulate over that;
+        # fall back to just last_it when there's no recorded history yet (e.g. a
+        # bare compute_next_it_weights() call in a unit test).
+        history = self._subgroups if self._subgroups else [last_it]
+
         transition_counts: dict[tuple, int] = {}
-        for sim in last_it:
-            if self.op_trajectory_name is not None:
+        visit_counts: dict[tuple, int] = {}
+        latest_visit_counts: dict[tuple, int] = {}
+        for it_replicas in history:
+            is_latest = it_replicas is history[-1]
+            for sim in it_replicas:
+                if self.op_trajectory_name is not None:
                 # columns: 0 = step, 1..N = order parameter values, in op_names order
                 raw = sim.analysis.observable_data(self.op_trajectory_name)
                 cols = [raw[i + 1].astype(int).values for i in range(len(op_names))]
             else:
                 df = sim.analysis.energy_df
-                cols = [df[name].astype(int).values for name in op_names]
-            state_seq = list(zip(*cols))
-            for k in range(len(state_seq) - 1):
-                s_from, s_to = state_seq[k], state_seq[k + 1]
-                if s_from == s_to or s_from not in legal_set or s_to not in legal_set:
-                    continue
-                if sum(abs(s_from[d] - s_to[d]) for d in range(ndim)) != 1:
-                    continue
-                key = (s_from, s_to)
-                transition_counts[key] = transition_counts.get(key, 0) + 1
+                    cols = [df[name].astype(int).values for name in op_names]
+                state_seq = list(zip(*cols))
+                for s in state_seq:
+                    visit_counts[s] = visit_counts.get(s, 0) + 1
+                    if is_latest:
+                        latest_visit_counts[s] = latest_visit_counts.get(s, 0) + 1
+                for k in range(len(state_seq) - 1):
+                    s_from, s_to = state_seq[k], state_seq[k + 1]
+                    if s_from == s_to or s_from not in legal_set or s_to not in legal_set:
+                        continue
+                    if sum(abs(s_from[d] - s_to[d]) for d in range(ndim)) != 1:
+                        continue
+                    key = (s_from, s_to)
+                    transition_counts[key] = transition_counts.get(key, 0) + 1
+
+        # Warn when a state's evidence base is dominated by a sudden influx of new
+        # visits from just this iteration — e.g. VMMC finally crossing into a state it
+        # had rarely or never reached before. That's not an instability: it's genuine
+        # new evidence, and the resulting weight can legitimately swing hard to reflect
+        # it. But without context that swing looks identical to noise, so flag it, and
+        # extra-damp those states below (rare_event_damping) so the fresh evidence
+        # nudges the weight rather than fully dictating it in one step.
+        # Only meaningful once there's real prior history to compare against — skip in
+        # the single-iteration fallback (e.g. direct unit-test calls).
+        rare_event_states: set[tuple] = set()
+        if len(history) > 1:
+            for s in legal_set:
+                new = latest_visit_counts.get(s, 0)
+                prior = visit_counts.get(s, 0) - new
+                if new > 0 and new > max(10, 2 * prior):
+                    rare_event_states.add(s)
+                    warnings.warn(
+                        f"State {s} got {new} new visit(s) this iteration vs. only "
+                        f"{prior} cumulative visit(s) before it — likely a rare "
+                        f"crossing event just happened. Damping this state's weight "
+                        f"update to rare_event_damping={self.rare_event_damping} of "
+                        f"the freshly computed value instead of adopting it outright."
+                    )
 
         state_to_idx = {s: i for i, s in enumerate(legal_states)}
         n = len(legal_states)
         eps = self.graph_pseudo_count
 
-        # Build one edge per adjacent legal pair (only the +1 direction to avoid duplicates)
+        # Build one edge per adjacent legal pair (only the +1 direction to avoid duplicates).
+        #
+        # Note: raw transition counts c[i->j] vs c[j->i] are NOT a valid signal here —
+        # VMMC satisfies detailed balance, so those raw counts converge to equal in the
+        # long run *regardless* of whether the current weights give flat sampling (it's
+        # just conservation of flux across a cut, true for any reversible MC). Comparing
+        # them directly makes every edge's correction vanish as sampling grows, collapsing
+        # the weights to flat even when the true equilibrium population is very skewed.
+        #
+        # Instead we use per-visit transition rates (Transition-Matrix-Monte-Carlo style):
+        # T(i->j) = c[i->j] / (visits to i). Detailed balance of the underlying dynamics
+        # gives p_eq(i) * T(i->j) = p_eq(j) * T(j->i), so T(i->j)/T(j->i) recovers the true
+        # (unbiased) equilibrium population ratio p_eq(j)/p_eq(i), independent of whatever
+        # bias the current weights already impose. Flat-sampling weights are w ~ 1/p_eq.
+        #
+        # That estimator is only as good as the number of transition events behind it —
+        # an edge crossed ~50 times in each direction still has ~15-20% sampling noise per
+        # direction, and exponentiating a noisy log-ratio compounds that multiplicatively.
+        # Applying the raw point estimate as this iteration's weight ratio, undamped, can
+        # turn a modest, noisy imbalance into a large, overconfident correction that then
+        # gets *run* for a full iteration — clip each edge's contribution to at most
+        # max_log_weight_step so a single edge's estimate can't move that far in one step,
+        # regardless of how large graph_pseudo_count-smoothed counts make it look.
         edges: list[tuple[int, int, float]] = []
         for state in legal_states:
             for dim in range(ndim):
@@ -758,10 +931,15 @@ class VMMCGraphReweight(VMMCAutoReweight):
                 nbr = tuple(nbr)
                 if not (all(0 <= nbr[d] < shape[d] for d in range(ndim)) and nbr in legal_set):
                     continue
-                c_ij = transition_counts.get((state, nbr), 0) + eps
-                c_ji = transition_counts.get((nbr, state), 0) + eps
-                # c_ij > c_ji → nbr is over-visited → want w[nbr] < w[state] → target < 0
-                target = np.log(c_ji / c_ij)
+                c_ij = transition_counts.get((state, nbr), 0)
+                c_ji = transition_counts.get((nbr, state), 0)
+                n_i = visit_counts.get(state, 0)
+                n_j = visit_counts.get(nbr, 0)
+                t_ij = (c_ij + eps) / (n_i + eps)
+                t_ji = (c_ji + eps) / (n_j + eps)
+                # t_ij > t_ji → nbr has higher equilibrium population → want w[nbr] < w[state]
+                target = np.log(t_ji / t_ij)
+                target = np.clip(target, -self.max_log_weight_step, self.max_log_weight_step)
                 edges.append((state_to_idx[state], state_to_idx[nbr], target))
 
         unwt_occ = self.get_overall_unwt_occ(last_it)
@@ -808,6 +986,21 @@ class VMMCGraphReweight(VMMCAutoReweight):
         legal_min = new_weights[self.legal_states_mask].min()
         if legal_min > 0:
             new_weights[self.legal_states_mask] /= legal_min
+
+        # Damp states flagged above: blend the freshly computed weight with the
+        # previous iteration's weight in log space, rather than adopting the new
+        # value outright, then renormalize again so min legal weight = 1 still holds.
+        if rare_event_states:
+            old_weights = last_it[0].weights
+            for state in rare_event_states:
+                if state not in legal_set:
+                    continue
+                old_w, candidate_w = old_weights[state], new_weights[state]
+                if old_w > 0 and candidate_w > 0:
+                    new_weights[state] = old_w * (candidate_w / old_w) ** self.rare_event_damping
+            legal_min = new_weights[self.legal_states_mask].min()
+            if legal_min > 0:
+                new_weights[self.legal_states_mask] /= legal_min
 
         if self.reweight_borders:
             self._apply_border_reweighting(new_weights, unwt_occ)

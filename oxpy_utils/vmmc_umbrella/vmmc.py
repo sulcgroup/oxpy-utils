@@ -458,6 +458,7 @@ class VmmcAnalysis(Analysis):
         # caller-supplied-ax path (e.g. VMMCAutoReweight.visualize()'s pie-chart grid) has
         # no figure of its own to hand back
         fig = None
+        fig = None
         if ax is None:
             fig, ax = plt.subplots()
         # Find the index of the bond_op in the simulation's order parameters

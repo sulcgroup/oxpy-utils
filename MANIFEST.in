@@ -1,0 +1,1 @@
+recursive-include oxpy_utils/defaults/inputs *.json

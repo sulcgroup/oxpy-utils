@@ -4,7 +4,7 @@ wham
 build
 docs
 .claude
-*.egg_info
+*.egg-info
 __pycache__
 
 # claude memory doc
@@ -27,3 +27,5 @@ examples/tutorials/vmmc_graph_reweight_8nt_duplex/vmmc_windowing_output
 examples/tutorials/vmmc_windowing_8nt_duplex
 # vmmc windowed reweight (random duplex)
 examples/vmmc_windowed_reweight_random_duplex/vmmc_windowed_reweight_output
+.vscode
+tests/test_data/*.pdb
