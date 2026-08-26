@@ -27,6 +27,7 @@ import subprocess as sp
 import traceback
 import queue
 import json
+import uuid
 
 import numpy as np
 
@@ -1323,7 +1324,11 @@ class SimulationManager:
         self.terminate_queue = self.manager.Queue(1)
         self.worker_process_list = []
         self.sleep_time = sleep_time
-        
+        # set by start_nvidia_cuda_mps_control() while a batch is running; None means
+        # this instance either hasn't started an MPS daemon yet or has stopped its own
+        self.mps_pipe_directory = None
+        self.mps_log_directory = None
+
         signal.signal(signal.SIGTERM, self._sigterm_handler)
 
 
@@ -1417,14 +1422,22 @@ class SimulationManager:
                             "restart_step_counter": "0", "steps": f"{continue_run}"})
         self.sim_queue.put(sim)
 
-    def worker_manager(self, gpu_mem_block=False, custom_observables=None, run_when_failed=False, cpu_run=False):
+    def worker_manager(self, gpu_mem_block=False, custom_observables=None, run_when_failed=False, cpu_run=False,
+                       use_mps=True):
         """
         Head process in charge of allocating queued simulations to processes and gpu memory.
+
+        :param use_mps: if True (default) and cpu_run is False, start a dedicated
+        nvidia-cuda-mps-control daemon for the duration of this batch so concurrent GPU
+        worker processes share contexts via MPS. Ignored for cpu_run. Pass False to manage
+        MPS yourself (or run without it) instead of having this call start/stop a daemon.
         """
         tic = timeit.default_timer()
         if cpu_run is True:
             gpu_mem_block = False
         self.custom_observables = custom_observables
+        if not cpu_run and use_mps:
+            self.start_nvidia_cuda_mps_control()
         # as long as there are simulations in the queue
         try:
             # or any(p.is_alive() for p in self.worker_process_list): # Keep running if sims queued OR workers active
@@ -1508,7 +1521,8 @@ class SimulationManager:
                     print(f"Process {p.pid} did not exit cleanly, terminating forcefully.")
                     p.terminate() # Force terminate if join timed out
             self.worker_process_list[:] = [] # Clear the list of processes
-
+            if not cpu_run and use_mps:
+                self.stop_nvidia_cuda_mps_control()
 
         toc = timeit.default_timer()
         print(f'All queued simulations finished in: {toc - tic}')
@@ -1620,37 +1634,73 @@ class SimulationManager:
     #             pass
     #     self.worker_process_list[:] = []
 
-    def start_nvidia_cuda_mps_control(self, pipe='$SLURM_TASK_PID'):
+    def start_nvidia_cuda_mps_control(self) -> bool:
         """
-        Begin nvidia-cuda-mps-server.
-        
-        Parameters:
-            pipe (str): directory to pipe control server information to. Defaults to PID of a slurm allocation
+        Start a dedicated nvidia-cuda-mps-control daemon for this manager's batch of
+        simulations, so concurrent oxDNA/oxpy worker processes launched by worker_job()
+        share GPU contexts through MPS instead of just being time-sliced by the driver.
+
+        Idempotent: a second call while this instance already owns a running daemon is a
+        no-op. The pipe/log directories are unique per call (pid + uuid) so multiple
+        SimulationManagers - or repeated batches - never collide with each other's daemons.
+
+        :return: True if MPS is active (started here, or already owned by this instance),
+                 False if nvidia-cuda-mps-control isn't available - callers should fall back
+                 to plain concurrent execution (worker processes still run, just without MPS).
         """
-        with open('launch_mps.tmp', 'w') as f:
-            f.write(f"""#!/bin/bash
-export CUDA_MPS_PIPE_DIRECTORY=/tmp/mps-pipe_{pipe};
-export CUDA_MPS_LOG_DIRECTORY=/tmp/mps-log_{pipe};
-mkdir -p $CUDA_MPS_PIPE_DIRECTORY;
-mkdir -p $CUDA_MPS_LOG_DIRECTORY;
-nvidia-cuda-mps-control -d"""
-                    )
-        os.system('chmod u+rx launch_mps.tmp')
-        sp.call('./launch_mps.tmp')
-        self.test_cuda_script()
-        os.system('./test_script')
-        os.system('echo $CUDA_MPS_PIPE_DIRECTORY')
+        if self.mps_pipe_directory is not None:
+            return True
 
-    #         os.system(f"""export CUDA_MPS_PIPE_DIRECTORY=/tmp/mps-pipe_{pipe};
-    # export CUDA_MPS_LOG_DIRECTORY=/tmp/mps-log_{pipe};
-    # mkdir -p $CUDA_MPS_PIPE_DIRECTORY;
-    # mkdir -p $CUDA_MPS_LOG_DIRECTORY;
-    # nvidia-cuda-mps-control -d;""")
+        if shutil.which('nvidia-cuda-mps-control') is None:
+            warnings.warn("nvidia-cuda-mps-control not found on PATH; continuing without CUDA "
+                           "MPS (concurrent GPU workers will be time-sliced by the driver instead "
+                           "of sharing contexts via MPS).")
+            return False
 
-    def restart_nvidia_cuda_mps_control(self):
-        os.system("""echo quit | nvidia-cuda-mps-control""")
-        sleep(0.5)
-        self.start_nvidia_cuda_mps_control()
+        tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
+        pipe_dir = f"/tmp/mps-pipe_{tag}"
+        log_dir = f"/tmp/mps-log_{tag}"
+        os.makedirs(pipe_dir, exist_ok=True)
+        os.makedirs(log_dir, exist_ok=True)
+
+        env = os.environ.copy()
+        env['CUDA_MPS_PIPE_DIRECTORY'] = pipe_dir
+        env['CUDA_MPS_LOG_DIRECTORY'] = log_dir
+        try:
+            sp.run(['nvidia-cuda-mps-control', '-d'], env=env, check=True,
+                   capture_output=True, text=True)
+        except (sp.CalledProcessError, OSError) as e:
+            warnings.warn(f"Failed to start nvidia-cuda-mps-control: {e}; continuing without CUDA MPS.")
+            return False
+
+        # propagate to this process's environment so mp.Process workers forked below
+        # (worker_job()) inherit it and route their CUDA contexts through this daemon
+        os.environ['CUDA_MPS_PIPE_DIRECTORY'] = pipe_dir
+        os.environ['CUDA_MPS_LOG_DIRECTORY'] = log_dir
+        self.mps_pipe_directory = pipe_dir
+        self.mps_log_directory = log_dir
+        return True
+
+    def stop_nvidia_cuda_mps_control(self):
+        """
+        Stop the MPS daemon started by start_nvidia_cuda_mps_control(), if this instance
+        started one. Safe to call unconditionally (e.g. from a finally block).
+        """
+        if self.mps_pipe_directory is None:
+            return
+        env = os.environ.copy()
+        env['CUDA_MPS_PIPE_DIRECTORY'] = self.mps_pipe_directory
+        env['CUDA_MPS_LOG_DIRECTORY'] = self.mps_log_directory
+        try:
+            sp.run(['nvidia-cuda-mps-control'], input='quit\n', env=env,
+                   text=True, capture_output=True, timeout=10)
+        except (sp.SubprocessError, OSError) as e:
+            warnings.warn(f"Failed to cleanly stop nvidia-cuda-mps-control: {e}")
+        finally:
+            os.environ.pop('CUDA_MPS_PIPE_DIRECTORY', None)
+            os.environ.pop('CUDA_MPS_LOG_DIRECTORY', None)
+            self.mps_pipe_directory = None
+            self.mps_log_directory = None
 
     def test_cuda_script(self):
         script = """#include <stdio.h>
