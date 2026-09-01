@@ -86,59 +86,51 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         """
         Check if sampling criteria are met for accessible states only
         """
-        # Create a mask for accessible states using vmmc_df
-        def state_is_desired(idx: Union[int, tuple]):
-            # idx comes from vmmc_df's index, which is already set to the order
-            # parameter column(s) (see read_vmmc_op_data) -- it *is* the state tuple,
-            # not something to look up a row for. A single order parameter produces a
-            # plain (non-Multi) Index, so idx arrives as a bare scalar in that case.
-            state_tuple = idx if isinstance(idx, tuple) else (idx,)
-            # Ignore states where any distance order parameter > 0
-            if any(state_tuple[self.num_bond_ops():]):
-                return False
-            return state_tuple in self.desired_state_list
-
-        # Check if all desired states were sampled in all simulations
-        any_unsampled_state = all([
-            (sim.analysis.statistics.loc[
-                 [idx for idx in sim.analysis.statistics.index if state_is_desired(idx)]
-             ]["sampling_percent"].values > 0).all()
+        # Check if all desired states were sampled in all simulations. A replica's
+        # last_hist file only lists states that replica actually visited (see
+        # read_op_hist_file), so a never-sampled desired state is simply absent from
+        # statistics.index -- align every replica onto the full desired-state list,
+        # treating "absent" as 0% sampling, before checking.
+        desired = [s for s in self.desired_state_list if not any(s[self.num_bond_ops():])]
+        all_desired_sampled = all(
+            (self._aligned_sampling_percent(sim, desired) > 0).all()
             for sim in last_it
-        ])
+        )
 
-        if not any_unsampled_state:
+        if not all_desired_sampled:
             print("Some accessible states were not sampled in this iteration, continuing...")
             return False
 
         # Get sampling std for accessible states only
         return self.get_sampling_std_filtered(last_it) < self.max_rel_std
 
+    def _aligned_sampling_percent(self, sim, states: list[tuple[int, ...]]) -> np.ndarray:
+        """
+        The sampling_percent for `states` (in that order) for one replica, with any state
+        the replica never visited -- and so absent from its last_hist / statistics index
+        -- filled in as 0.
+
+        Needed because last_hist only records visited states, so each replica's
+        statistics frame covers a different subset of the state space; the raw .values
+        arrays can't be stacked across replicas without this alignment.
+        """
+        series = sim.analysis.statistics["sampling_percent"]
+        # a single order parameter gives a plain Index keyed by scalars, not 1-tuples
+        keys = [s[0] if len(s) == 1 else s for s in states]
+        return series.reindex(keys, fill_value=0.0).to_numpy()
+
     def get_sampling_std_filtered(self, it: VmmcReplicas) -> float:
         """
         Get standard deviation of sampling percent across replicas for accessible states only
         """
+        # accessible == legal, excluding states with any distance order parameter > 0
+        accessible = [s for s in self.legal_state_list if not any(s[self.num_bond_ops():])]
 
-        # Create mask for accessible states. `row.name` is the row's index label --
-        # statistics is indexed by the order parameter state(s) (see
-        # calculate_sampling_and_probabilities), not by op-name columns.
-        def state_is_accessible(row):
-            idx = row.name
-            state_tuple = idx if isinstance(idx, tuple) else (idx,)
-            # Ignore states where any distance order parameter > 0
-            if any(state_tuple[self.num_bond_ops():]):
-                return False
-            return state_tuple in self.legal_state_list
-
-        total_sampling: np.ndarray = np.sum([
-            sim.analysis.statistics[sim.analysis.statistics.apply(state_is_accessible, axis=1)][
-                "sampling_percent"].values
-            for sim in it
-        ], axis=0)
-
-        # normalize so it's a percent again
-        total_sampling /= len(it)
-        # compute standard deviation
-        return total_sampling.std()
+        mean_sampling = np.mean(
+            [self._aligned_sampling_percent(sim, accessible) for sim in it],
+            axis=0,
+        )
+        return mean_sampling.std()
 
     def check_ready(self):
         if self.extrapolate_hist_Ts is None:

@@ -522,6 +522,20 @@ class TestGetSamplingSdFiltered:
         result = ar.get_sampling_std_filtered([sim])
         assert result == pytest.approx(np.std([33.3, 33.3, 33.4]), rel=1e-6)
 
+    def test_ragged_replicas_missing_states_treated_as_zero(self, tmp_path):
+        # Regression: each replica's last_hist only lists states it actually visited,
+        # so per-replica statistics frames cover different subsets of the state space.
+        # The raw .values arrays then can't be stacked (inhomogeneous shape) -- states
+        # absent from a replica's frame must be aligned in as 0% before averaging.
+        ar = _make_ar(tmp_path)   # legal/desired states (0,), (1,), (2,)
+        sims = [
+            _mock_sim_with_indexed_stats({0: 50.0, 1: 30.0, 2: 20.0}),
+            _mock_sim_with_indexed_stats({1: 60.0, 2: 40.0}),   # never visited state 0
+        ]
+        result = ar.get_sampling_std_filtered(sims)
+        # per-state cross-replica means: [25.0, 45.0, 30.0]
+        assert result == pytest.approx(np.std([25.0, 45.0, 30.0]), rel=1e-6)
+
 
 # ---------------------------------------------------------------------------
 # check_result
@@ -537,6 +551,14 @@ class TestCheckResult:
     def test_false_when_a_desired_state_unsampled(self, tmp_path, capsys):
         ar = _make_ar(tmp_path)
         sim = _mock_sim_with_indexed_stats({0: 0.0, 1: 50.0, 2: 50.0})
+        assert ar.check_result([sim]) == False
+        assert "not sampled" in capsys.readouterr().out
+
+    def test_false_when_a_desired_state_absent_from_index(self, tmp_path, capsys):
+        # A never-visited desired state is absent from statistics.index entirely,
+        # not present with value 0 -- must still be detected as unsampled.
+        ar = _make_ar(tmp_path)
+        sim = _mock_sim_with_indexed_stats({1: 50.0, 2: 50.0})   # state 0 missing
         assert ar.check_result([sim]) == False
         assert "not sampled" in capsys.readouterr().out
 
