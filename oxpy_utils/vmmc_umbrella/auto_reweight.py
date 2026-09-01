@@ -11,7 +11,6 @@ from matplotlib.patches import Patch
 from matplotlib.gridspec import GridSpec
 
 from .metasimulation import VMMCMetaSimulation
-from ..utils.util import generate_distinct_colors
 from .vmmc_replicas import VmmcReplicas, _replica_colors
 
 from .vmmc import VirtualMoveMonteCarlo
@@ -125,8 +124,6 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         def state_is_accessible(row):
             idx = row.name
             state_tuple = idx if isinstance(idx, tuple) else (idx,)
-            idx = row.name
-            state_tuple = idx if isinstance(idx, tuple) else (idx,)
             # Ignore states where any distance order parameter > 0
             if any(state_tuple[self.num_bond_ops():]):
                 return False
@@ -153,83 +150,6 @@ class VMMCAutoReweight(VMMCMetaSimulation):
         if self.starting_conf is None:
             raise ValueError("No starting_conf specified! Set self.starting_conf to a directory "
                               "containing the starting .top/.dat files before calling run().")
-
-        if self.starting_conf is None:
-            raise ValueError("No starting_conf specified! Set self.starting_conf to a directory "
-                              "containing the starting .top/.dat files before calling run().")
-
-    def describe_state_space(self,
-                             breakdown_op: Optional[Union[str, int, OrderParameter]] = None,
-                             verbose: bool = True) -> dict:
-        """
-        Calculate the size of this reweighter's order-parameter state space: how many
-        (op1_val, op2_val, ...) combinations are physically possible, how many survive
-        filter_legal_states, and how many survive filter_desired_states (the flat-sampling
-        target). Useful for sanity-checking whether a run's step budget is even plausible
-        for covering desired_state_list before spending compute on it.
-
-        :param breakdown_op: optional order parameter (by name, index, or OrderParameter) to
-            break the legal-state count down by, one entry per value of that op. Defaults to
-            the primary bond order parameter (bond_ops()[0]) if any bond ops are set.
-        :param verbose: if True, print a human-readable summary
-        :return: dict with keys "possible", "legal", "desired", and "breakdown"
-            (a dict mapping op value -> legal-state count, in ascending op-value order)
-        """
-        ops = self.order_parameters()
-        all_states = possible_states(*ops)
-        legal_states = self.legal_state_list
-        desired_states = self.desired_state_list
-
-        if breakdown_op is None and self._bond_ops:
-            breakdown_op = self._bond_ops[0]
-
-        breakdown = None
-        if breakdown_op is not None:
-            if isinstance(breakdown_op, str):
-                op_idx = next(i for i, op in enumerate(ops) if op.name == breakdown_op)
-            elif isinstance(breakdown_op, OrderParameter):
-                op_idx = next(i for i, op in enumerate(ops) if op.name == breakdown_op.name)
-            else:
-                op_idx = breakdown_op
-            counts: dict[int, int] = {}
-            for state in legal_states:
-                counts[state[op_idx]] = counts.get(state[op_idx], 0) + 1
-            breakdown = dict(sorted(counts.items()))
-
-        summary = {
-            "possible": len(all_states),
-            "legal": len(legal_states),
-            "desired": len(desired_states),
-            "breakdown": breakdown,
-        }
-
-        if verbose:
-            print(f"possible states: {summary['possible']}")
-            print(f"legal states:    {summary['legal']}")
-            print(f"desired states:  {summary['desired']}")
-            if breakdown is not None:
-                op_name = ops[op_idx].name
-                for val, count in breakdown.items():
-                    print(f"  {op_name}={val}: {count} legal states")
-
-        return summary
-
-    def check_energy_print_budget(self, print_energy_every: Union[int, float]):
-        """
-        Raise if a single iteration won't produce enough energy-print statements (summed
-        across all replicas) to have even one data point per desired state -- a necessary
-        (not sufficient) condition for the reweighter to see transitions across the whole
-        desired state space within an iteration.
-        """
-        n_desired = len(self.desired_state_list)
-        n_prints = self.n_reps * self.steps_per_iter / print_energy_every
-        if n_prints < n_desired:
-            raise ValueError(
-                f"Energy print budget too small: {self.n_reps} replicas x {self.steps_per_iter:.3g} steps / "
-                f"print_energy_every={print_energy_every:.3g} = {n_prints:.1f} energy-print statements per "
-                f"iteration, but there are {n_desired} desired states to sample. Increase steps_per_iter, "
-                f"decrease print_energy_every, or shrink the desired state space."
-            )
 
     def describe_state_space(self,
                              breakdown_op: Optional[Union[str, int, OrderParameter]] = None,
@@ -477,8 +397,6 @@ class VMMCAutoReweight(VMMCMetaSimulation):
 
             if is_2d_weights:
                 # Plot weights as 2D heatmap
-                order_params_for_plot = tuple(None if i < len(self.bond_ops()) else 0
-                                              for i in range(len(replicas[0].list_order_parameters())))
                 replicas[0].plot_weights([bond_op_index,secondary_bond_op_index], ax=ax_weights)
 
                 # Force square aspect ratio
@@ -492,7 +410,7 @@ class VMMCAutoReweight(VMMCMetaSimulation):
                                          ax=ax_weights,
                                          colors=self.get_weights_colors())
 
-            ax_weights.set_ylabel(f"Weights", fontweight='bold')
+            ax_weights.set_ylabel("Weights", fontweight='bold')
 
             # Add iteration number label on the left side
             ax_weights.text(-0.15, 0.95, f"{iter_idx}",
@@ -852,11 +770,11 @@ class VMMCGraphReweight(VMMCAutoReweight):
             is_latest = it_replicas is history[-1]
             for sim in it_replicas:
                 if self.op_trajectory_name is not None:
-                # columns: 0 = step, 1..N = order parameter values, in op_names order
-                raw = sim.analysis.observable_data(self.op_trajectory_name)
-                cols = [raw[i + 1].astype(int).values for i in range(len(op_names))]
-            else:
-                df = sim.analysis.energy_df
+                    # columns: 0 = step, 1..N = order parameter values, in op_names order
+                    raw = sim.analysis.observable_data(self.op_trajectory_name)
+                    cols = [raw[i + 1].astype(int).values for i in range(len(op_names))]
+                else:
+                    df = sim.analysis.energy_df
                     cols = [df[name].astype(int).values for name in op_names]
                 state_seq = list(zip(*cols))
                 for s in state_seq:
