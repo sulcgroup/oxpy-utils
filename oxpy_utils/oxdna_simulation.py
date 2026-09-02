@@ -2306,10 +2306,16 @@ class Analysis(SimulationComponent):
         assert observable_name in self.observables, f"No observable named `{observable_name}`!"
         # if data not loaded, load it
         if observable_name not in self.observables_data:
-            # load observable data
-            # cannot assume that observable name = file name! often not true?
-            # todo: nicer read_csv
-            self.observables_data[observable_name] = pd.read_csv(self.sim.sim_dir / (self.observables[observable_name].file_name + '.txt'), header=None, engine='pyarrow')
+            # oxDNA writes the observable output to exactly the observable's `name`
+            # (see Observable.to_dict / observables.json) with no extension appended --
+            # matches plot_observable/hist_observable, which also read `file_name` as-is.
+            obs_file = self.sim.sim_dir / self.observables[observable_name].file_name
+            # oxDNA observable output is whitespace-delimited (and multi-column for e.g.
+            # the op_trajectory observable); the pyarrow engine's comma default collapses
+            # every row into a single string column, so read with a whitespace separator.
+            self.observables_data[observable_name] = pd.read_csv(
+                obs_file, header=None, sep=r"\s+"
+            )
         return self.observables_data[observable_name]
 
     def get_observable_last_entry_time(self, obs: Observable) -> float:

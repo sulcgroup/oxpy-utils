@@ -1,7 +1,8 @@
 import pytest
 import shutil
 from pathlib import Path
-from oxpy_utils.oxdna_simulation import Simulation, SimulationManager
+from oxpy_utils.oxdna_simulation import Analysis, Simulation, SimulationManager
+from oxpy_utils.utils.observable import Observable, ObservableColumn
 from unittest.mock import Mock, patch
 
 
@@ -264,3 +265,57 @@ class TestSimulationManager:
     #         sim.input.swap_default_input("cpu_MC_relax")
     #         sim_manager.queue_sim(sim)
     #     # Simulate a process death
+
+
+class TestAnalysisObservableData:
+    """
+    Analysis.observable_data must read the observable's output file at exactly its
+    `name` (oxDNA appends no extension), parsing oxDNA's whitespace-delimited,
+    possibly multi-column output.
+    """
+
+    def _analysis(self, tmp_path) -> Analysis:
+        sim = Mock()
+        sim.sim_dir = tmp_path
+        sim.sim_files = Mock()
+        return Analysis(sim)
+
+    def test_reads_multicolumn_whitespace_file_at_bare_name(self, tmp_path):
+        # what build_op_trajectory_observable produces: step + one int per order parameter,
+        # whitespace-delimited, trailing space, file named "op_trajectory" (no .txt)
+        (tmp_path / "op_trajectory").write_text(
+            "           0 6 0 0 0.383386 \n"
+            "       10000 6 0 0 0.357645 \n"
+            "       20000 5 1 0 0.408355 \n"
+        )
+        analysis = self._analysis(tmp_path)
+        obs = Observable("op_trajectory", 10000,
+                         ObservableColumn("step"), ObservableColumn("order_parameters"))
+        analysis.observables["op_trajectory"] = obs
+
+        df = analysis.observable_data("op_trajectory")
+
+        assert df.shape == (3, 5)
+        # every column is numeric (not one collapsed string column)
+        assert list(df[1].astype(int)) == [6, 6, 5]
+        assert list(df[2].astype(int)) == [0, 0, 1]
+
+    def test_reads_single_column_file(self, tmp_path):
+        (tmp_path / "hb_count").write_text("12\n11\n13\n")
+        analysis = self._analysis(tmp_path)
+        analysis.observables["hb_count"] = Observable(
+            "hb_count", 1000, ObservableColumn("hb_list", only_count=True))
+
+        df = analysis.observable_data("hb_count")
+
+        assert df.shape == (3, 1)
+        assert list(df[0]) == [12, 11, 13]
+
+    def test_result_is_cached(self, tmp_path):
+        (tmp_path / "obs").write_text("1 2\n3 4\n")
+        analysis = self._analysis(tmp_path)
+        analysis.observables["obs"] = Observable("obs", 1, ObservableColumn("step"))
+
+        first = analysis.observable_data("obs")
+        (tmp_path / "obs").write_text("9 9\n9 9\n")   # change on disk
+        assert analysis.observable_data("obs").equals(first)   # served from cache
