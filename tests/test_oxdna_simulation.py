@@ -319,3 +319,52 @@ class TestAnalysisObservableData:
         first = analysis.observable_data("obs")
         (tmp_path / "obs").write_text("9 9\n9 9\n")   # change on disk
         assert analysis.observable_data("obs").equals(first)   # served from cache
+
+
+class TestLoadObservablesFromJson:
+    """
+    load_observables_from_json rebuilds self.observables from observables.json so
+    observable_data works after a previously-run sim is reloaded from disk (e.g.
+    resuming a VMMCAutoReweight run).
+    """
+
+    def _analysis(self, tmp_path) -> Analysis:
+        sim = Mock()
+        sim.sim_dir = tmp_path
+        sim.sim_files = Mock()
+        return Analysis(sim)
+
+    def test_rebuilds_observables_keyed_by_name(self, tmp_path):
+        # the shape build_op_trajectory_observable + build_replica leave on disk
+        (tmp_path / "observables.json").write_text(
+            '{"output_1": {"print_every": "100000", "name": "hb_count",'
+            '  "cols": [{"type": "hb_list", "only_count": "True"}]},'
+            ' "output": {"print_every": "10000", "name": "op_trajectory",'
+            '  "cols": [{"type": "step"}, {"type": "order_parameters"}]}}'
+        )
+        analysis = self._analysis(tmp_path)
+        analysis.load_observables_from_json()
+
+        assert set(analysis.observables) == {"hb_count", "op_trajectory"}
+        op_traj = analysis.observables["op_trajectory"]
+        assert op_traj.file_name == "op_trajectory"
+        assert op_traj.print_every == 10000
+        assert [c.type_name for c in op_traj.cols] == ["step", "order_parameters"]
+        assert list(analysis.observables["hb_count"].cols)[0].col_attrs == {"only_count": "True"}
+
+    def test_enables_observable_data_after_reload(self, tmp_path):
+        (tmp_path / "observables.json").write_text(
+            '{"output": {"print_every": "10000", "name": "op_trajectory",'
+            '  "cols": [{"type": "step"}, {"type": "order_parameters"}]}}'
+        )
+        (tmp_path / "op_trajectory").write_text("0 6 0\n10000 5 1\n")
+        analysis = self._analysis(tmp_path)
+        analysis.load_observables_from_json()
+
+        df = analysis.observable_data("op_trajectory")
+        assert df.shape == (2, 3)
+
+    def test_no_json_is_noop(self, tmp_path):
+        analysis = self._analysis(tmp_path)
+        analysis.load_observables_from_json()   # must not raise
+        assert analysis.observables == {}

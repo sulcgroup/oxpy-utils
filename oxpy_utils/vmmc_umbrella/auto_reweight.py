@@ -74,6 +74,9 @@ class VMMCAutoReweight(VMMCMetaSimulation):
                 replica.input.read_input()
                 replica.read_order_parameters()
                 replica.load_weights()
+                # restore in-memory observable registrations so compute_next_it_weights'
+                # op_trajectory path (sim.analysis.observable_data) works after a reload
+                replica.analysis.load_observables_from_json()
                 if (replica.sim_dir / replica.input["last_hist_file"]).is_file():
                     replica.sim_files.last_hist = replica.sim_dir / "last_hist.dat"
             self._subgroups.append(VmmcReplicas(iteration_directory, iteration_directory, self.n_reps))

@@ -49,7 +49,7 @@ from oxDNA_analysis_tools.rg import rg as _oat_rg
 from .defaults.defaults import DefaultInput, SEQ_DEP_PARAMS, NA_PARAMETERS, RNA_PARAMETERS, get_default_input
 from .structure_editor.dna_structure import DNAStructure, load_dna_structure
 from .utils.force import *
-from .utils.observable import Observable
+from .utils.observable import Observable, ObservableColumn
 
 # import cupy
 
@@ -2297,6 +2297,31 @@ class Analysis(SimulationComponent):
         sleep(2.5)
 
     # TODO: code to add observables and run dnaAnalysis
+
+    def load_observables_from_json(self):
+        """
+        Rebuild self.observables from the simulation's observables.json.
+
+        add_observable only writes observables.json (and the input-file entry); nothing
+        repopulates the in-memory self.observables dict when a previously-run simulation
+        is reloaded from disk. Without this, observable_data() raises "No observable
+        named ..." after a reload -- e.g. resuming a VMMCAutoReweight run via load().
+
+        Keyed by the observable's file name (== its `name`), matching how
+        build_op_trajectory_observable / build_com_hb_observable register observables.
+        """
+        obs_path = self.sim.sim_dir / "observables.json"
+        if not obs_path.is_file():
+            return
+        with obs_path.open() as f:
+            entries = json.load(f)
+        for entry in entries.values():
+            cols = [
+                ObservableColumn(col["type"], **{k: v for k, v in col.items() if k != "type"})
+                for col in entry.get("cols", [])
+            ]
+            obs = Observable(entry["name"], entry["print_every"], *cols)
+            self.observables[obs.file_name] = obs
 
     def observable_data(self, observable_name: str) -> pd.DataFrame:
         """
