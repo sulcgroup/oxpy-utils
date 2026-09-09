@@ -53,6 +53,20 @@ from .utils.observable import Observable, ObservableColumn
 
 # import cupy
 
+
+class NoneFileDirWarning(UserWarning):
+    """
+    Emitted when a Simulation is constructed with ``file_dir=None``. This is legitimate
+    when loading an already-built simulation from disk (the source conf dir is not needed
+    and often not recorded), so it's given its own category to make it easy to silence
+    without also hiding every other UserWarning::
+
+        import warnings
+        from oxpy_utils.oxdna_simulation import NoneFileDirWarning
+        warnings.filterwarnings("ignore", category=NoneFileDirWarning)
+    """
+
+
 class SimDirInfo(abc.ABC):
     """
     interface for file_dir and sim_dir methods
@@ -137,7 +151,12 @@ class Simulation(SimDirInfo):
             self.file_dir = file_dir.sim_dir
             self._build_sim = None
         elif file_dir is None:
-            warnings.warn("File dir set to `None`, hopefully you know what you're doing.")
+            warnings.warn(
+                "File dir set to `None`, hopefully you know what you're doing. "
+                "(silence with warnings.filterwarnings('ignore', category=NoneFileDirWarning))",
+                NoneFileDirWarning,
+                stacklevel=2,
+            )
         else:
             raise ValueError(f"Invalid type {type(file_dir)} for parameter file_dir")
 

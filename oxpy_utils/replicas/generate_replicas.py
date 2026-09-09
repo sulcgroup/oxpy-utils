@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import itertools
+import warnings
+from contextlib import nullcontext
 from pathlib import Path
 from os.path import exists
 from typing import Any, Union, Callable, Type, Generator
 
-from oxpy_utils.oxdna_simulation import Simulation
+from oxpy_utils.oxdna_simulation import Simulation, NoneFileDirWarning
 
 
 class Replicas:
@@ -42,13 +44,22 @@ class Replicas:
         self.simulations = []
 
     def init(self):
-        for i in range(self.nreplicas):
-            if exists(f"{self.sim_dir}_{i}"):
-                self.simulations.append(self.SimulationClass(self.file_dir,
-                                                             f"{self.sim_dir}_{i}"))
-            else:
-                self.simulations.append(self.SimulationClass(self.file_dir,
-                                                             self.sim_dir / f"{self.prefix}{i+1}") )
+        # A None conf_source here means we're loading already-built replicas from disk
+        # (e.g. Replicas.load / VmmcWindowing.load): the source conf dir isn't needed and
+        # often wasn't recorded, so the per-replica NoneFileDirWarning is just noise.
+        suppress_none_warning = (
+            warnings.catch_warnings() if self.file_dir is None else nullcontext()
+        )
+        with suppress_none_warning:
+            if self.file_dir is None:
+                warnings.simplefilter("ignore", NoneFileDirWarning)
+            for i in range(self.nreplicas):
+                if exists(f"{self.sim_dir}_{i}"):
+                    self.simulations.append(self.SimulationClass(self.file_dir,
+                                                                 f"{self.sim_dir}_{i}"))
+                else:
+                    self.simulations.append(self.SimulationClass(self.file_dir,
+                                                                 self.sim_dir / f"{self.prefix}{i+1}") )
 
     def __getitem__(self, item: int) -> Simulation:
         return self.simulations[item]
