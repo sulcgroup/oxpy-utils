@@ -134,7 +134,6 @@ class FFSProgram:
             shooter.set_interfaces(~args[0], interface)
             shooter.input_file_params = {**self.input_file_params}
             shooter.set_desired_success_count(self.desired_n_successes)
-            shooter.oxloghander = self.loghandler
             shooter.update_queue = self.graph_update_queue
             self.shooters.append(shooter)
 
