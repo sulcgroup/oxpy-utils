@@ -6,6 +6,10 @@ from time import sleep
 from typing import Any, Union
 import json
 
+import hashlib
+from collections import defaultdict
+from matplotlib.patches import Patch
+
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -206,6 +210,7 @@ class FFSProgram:
         # a lookup table that records where a particular configuration was produced, so that later steps (“shoot”
         # nodes) can be connected to the correct parent node in the process graph.
         source_map: dict[tuple[str, int], tuple[str, int, int]] = dict()
+        graph_logger = self.loghandler.spinoff("graph_updater")
         while True:
             try:
                 cmd = self.graph_update_queue.get(timeout=5)  # avoid indefinite hang
@@ -215,78 +220,84 @@ class FFSProgram:
             # terminate signal
             if cmd_type == "TERMINATE":
                 break # end of process
-            elif cmd_type == "CPY_CONF":
-                # unpacck info
-                source_process_name, process_idx, sim_idx, conf_count = cmd
-                assert -1 < process_idx < self.n_cpus, f"Invalid process idx {process_idx} in graph update"
+            # everything else is best-effort: a malformed/out-of-order message (e.g. a source_map entry
+            # dropped by a race between a worker process exiting and its queue feeder thread flushing)
+            # should not be allowed to kill this thread and silently freeze the rest of the graph.
+            try:
+                if cmd_type == "CPY_CONF":
+                    # unpacck info
+                    source_process_name, process_idx, sim_idx, conf_count = cmd
+                    assert -1 < process_idx < self.n_cpus, f"Invalid process idx {process_idx} in graph update"
 
-                # map source process name and conf count to full node id
-                source_map[source_process_name, conf_count] = (source_process_name, process_idx, sim_idx)
-            else:
-                # pop process and sim idxs, which are universal
-                process_idx, sim_idx, *cmd = cmd
-                assert -1 < process_idx < self.n_cpus, f"Invalid process idx {process_idx} in graph update"
-                assert -1 < sim_idx, f"Invalid sim idx {sim_idx} in graph update"
-                # difficult to fully validate sim_idx without also knowing process step, since it's unbounded
-                # if this is a report on a fluxer step
-                if cmd_type == "flux":
-                    # pop fluxer step
-                    fluxer_step, source_sim = cmd
-                    assert fluxer_step in ["equilibrate", "reset", "to_l-1_fwd", "flux_fwd", "flux_back"]
-                    # identify nodes with 3-length tuple of program step, process idx, sim idx
-                    node_id: tuple[str, int, int] = (self.fluxer.name, process_idx, sim_idx)
-                    self.process_graph.add_node(
-                        node_id,
-                        fluxer_step=fluxer_step,
-                        path=str(self.root_dir / f"p{process_idx}" / f"sim{sim_idx}")
-                    )
-                    assert  source_sim != node_id, "Cannot have self-loop in process graph - source sim cannot be the same node as the new flux node"
-                    assert source_sim == "origin" or self.process_graph.nodes[node_id]["fluxer_step"] != self.process_graph.nodes[source_sim]["fluxer_step"], f"Cannot have two nodes with the same fluxer_step in parent-child relationship - check graph structure for errors. Node: {node_id}, source node: {source_sim}, fluxer_step of new node: {self.process_graph.nodes[node_id]['fluxer_step']}, fluxer_step of source node: {self.process_graph.nodes[source_sim]['fluxer_step']}"
-                    self.process_graph.add_edge(
-                        source_sim,
-                        node_id
-                    )
-                elif cmd_type == "shoot":
-                    # shoot name = name of this shooter
-                    shoot_name, source_conf_idx = cmd
-                    # dirty extract name
-                    shoot_idx = next(i for i,s in enumerate(self.shooters) if s.name == shoot_name)
-                    # shoot_idx = int(shoot_name[len("shoot"):])-1
-                    shooter_obj = self.shooters[shoot_idx]
-                    # identify nodes with 3-length tuple of program step, process idx, sim idx
-                    node_id: tuple[str, int, int] = (shoot_name, process_idx, sim_idx)
-                    self.process_graph.add_node(
-                        node_id,
-                        shooter=shooter_obj,
-                        source_conf=str(shooter_obj.starting_confs[source_conf_idx])
-                    )
-                    if not shoot_idx: # if this is first shoot (shoot_idx == 0), source is fluxer
-                        try:
-                            source_sim_node = source_map[(self.fluxer.name, source_conf_idx)]
-                        except KeyError as e:
-                            raise KeyError(f"Could not find source node for fluxer conf idx {source_conf_idx}") from e
-                    else:
-                        try:
-                            # shoot names index from 1, so this is actually shoot_idx-1+1
-                            source_sim_node = source_map[(self.shooters[shoot_idx-1].name, source_conf_idx)]
-                        except KeyError as e:
-                            raise KeyError(f"Could not find source node for shooter {shoot_idx} conf idx {source_conf_idx}") from e
-                    self.process_graph.add_edge(
-                        source_sim_node,
-                        node_id
-                    )
-                elif cmd_type == "shoot_report":
-                    shoot_name, status = cmd
-                    node_id = (shoot_name, process_idx, sim_idx)
-                    # queue is FIFO, node should already be in graph
-                    self.process_graph.nodes[node_id]["success"] = status # can be true, false, or "undetermined"
-                elif cmd_type == "flux_report":
-                    status, = cmd
-                    node_id = (self.fluxer.name, process_idx, sim_idx)
-                    # queue is FIFO, node should already be in graph
-                    self.process_graph.nodes[node_id]["success"] = status # can be true, false, or "undetermined"
+                    # map source process name and conf count to full node id
+                    source_map[source_process_name, conf_count] = (source_process_name, process_idx, sim_idx)
                 else:
-                    raise Exception(f"Unknown command type {cmd_type}")
+                    # pop process and sim idxs, which are universal
+                    process_idx, sim_idx, *cmd = cmd
+                    assert -1 < process_idx < self.n_cpus, f"Invalid process idx {process_idx} in graph update"
+                    assert -1 < sim_idx, f"Invalid sim idx {sim_idx} in graph update"
+                    # difficult to fully validate sim_idx without also knowing process step, since it's unbounded
+                    # if this is a report on a fluxer step
+                    if cmd_type == "flux":
+                        # pop fluxer step
+                        fluxer_step, source_sim = cmd
+                        assert fluxer_step in ["equilibrate", "reset", "to_l-1_fwd", "flux_fwd", "flux_back"]
+                        # identify nodes with 3-length tuple of program step, process idx, sim idx
+                        node_id: tuple[str, int, int] = (self.fluxer.name, process_idx, sim_idx)
+                        self.process_graph.add_node(
+                            node_id,
+                            fluxer_step=fluxer_step,
+                            path=str(self.root_dir / f"p{process_idx}" / f"sim{sim_idx}")
+                        )
+                        assert  source_sim != node_id, "Cannot have self-loop in process graph - source sim cannot be the same node as the new flux node"
+                        assert source_sim == "origin" or self.process_graph.nodes[node_id]["fluxer_step"] != self.process_graph.nodes[source_sim]["fluxer_step"], f"Cannot have two nodes with the same fluxer_step in parent-child relationship - check graph structure for errors. Node: {node_id}, source node: {source_sim}, fluxer_step of new node: {self.process_graph.nodes[node_id]['fluxer_step']}, fluxer_step of source node: {self.process_graph.nodes[source_sim]['fluxer_step']}"
+                        self.process_graph.add_edge(
+                            source_sim,
+                            node_id
+                        )
+                    elif cmd_type == "shoot":
+                        # shoot name = name of this shooter
+                        shoot_name, source_conf_idx = cmd
+                        # dirty extract name
+                        shoot_idx = next(i for i,s in enumerate(self.shooters) if s.name == shoot_name)
+                        # shoot_idx = int(shoot_name[len("shoot"):])-1
+                        shooter_obj = self.shooters[shoot_idx]
+                        # identify nodes with 3-length tuple of program step, process idx, sim idx
+                        node_id: tuple[str, int, int] = (shoot_name, process_idx, sim_idx)
+                        self.process_graph.add_node(
+                            node_id,
+                            shooter=shooter_obj,
+                            source_conf=str(shooter_obj.starting_confs[source_conf_idx])
+                        )
+                        if not shoot_idx: # if this is first shoot (shoot_idx == 0), source is fluxer
+                            try:
+                                source_sim_node = source_map[(self.fluxer.name, source_conf_idx)]
+                            except KeyError as e:
+                                raise KeyError(f"Could not find source node for fluxer conf idx {source_conf_idx}") from e
+                        else:
+                            try:
+                                # shoot names index from 1, so this is actually shoot_idx-1+1
+                                source_sim_node = source_map[(self.shooters[shoot_idx-1].name, source_conf_idx)]
+                            except KeyError as e:
+                                raise KeyError(f"Could not find source node for shooter {shoot_idx} conf idx {source_conf_idx}") from e
+                        self.process_graph.add_edge(
+                            source_sim_node,
+                            node_id
+                        )
+                    elif cmd_type == "shoot_report":
+                        shoot_name, status = cmd
+                        node_id = (shoot_name, process_idx, sim_idx)
+                        # queue is FIFO, node should already be in graph
+                        self.process_graph.nodes[node_id]["success"] = status # can be true, false, or "undetermined"
+                    elif cmd_type == "flux_report":
+                        status, = cmd
+                        node_id = (self.fluxer.name, process_idx, sim_idx)
+                        # queue is FIFO, node should already be in graph
+                        self.process_graph.nodes[node_id]["success"] = status # can be true, false, or "undetermined"
+                    else:
+                        raise Exception(f"Unknown command type {cmd_type}")
+            except Exception as e:
+                graph_logger.warning(f"Dropping malformed/unresolvable graph update {(cmd_type, *cmd)!r}: {e}")
 
 
     def save_graph(self):
@@ -386,9 +397,6 @@ class FFSProgram:
 
     def plot_graph(self):
         G = self.process_graph
-        import hashlib
-        from collections import defaultdict
-        from matplotlib.patches import Patch
 
         fluxer_name = self.fluxer.name
 
