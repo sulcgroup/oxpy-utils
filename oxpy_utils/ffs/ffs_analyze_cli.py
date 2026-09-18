@@ -3,7 +3,9 @@ from pathlib import Path
 
 import yaml
 
+from oxpy_utils.ffs.ffs_interface import Comparison, FFSInterface
 from oxpy_utils.ffs.ffs_program import FFSProgram
+from oxpy_utils.utils.order_parameter import OrderParameter
 import argparse
 
 # use with the same yml input as ffs_cli, but instead of running the program, just analyze and output results
@@ -34,6 +36,27 @@ def main():
         ffs_data["desired_n_successes"],
         Path(ffs_data["file_dir"])
     )
+
+    # Create order parameters
+    order_params = {}
+    for name, op in ffs_data["order_parameters"].items():
+        order_params[name] = OrderParameter(name,
+                                            op["order_parameter"],
+                                            list(zip(op["nucleotide_indexes_0"],
+                                                     op["nucleotide_indexes_1"])
+                                                 )
+                                            )
+
+    # Setup interfaces - populates program.shooters, required before load_graph()
+    # can resolve shooter names (e.g. "shoot1") stored in process_graph.json
+    interfaces = []
+    for iface in ffs_data["interfaces"]:
+        op = order_params[iface["op"]]
+        threshold = iface["value"]
+        comparison = Comparison(iface["compare"])
+        interfaces.append(FFSInterface(op, threshold, comparison))
+    program.set_interfaces(*interfaces)
+
     program.load()
     program.load_graph()
     # export individual shooter csv files
