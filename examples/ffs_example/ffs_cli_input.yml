@@ -17,7 +17,7 @@ use_cuda: false  # whether to use CUDA. defaults to "false"
 input_file_params: # additional params which will apply to all oxdna simulations.
   T: "70C" # simulation temperature, deliberately high to make example run faster
 order_parameters:
-  native: # name of order parameter. see `interface` `op` below
+  num_hbs: # name of order parameter. see `interface` `op` below
     order_parameter: "bond"  # type of order parameter
     nucleotide_indexes_0: [0, 1,2,3,4,5,6,7] # strand 1
     nucleotide_indexes_1: [15, 14, 13, 12, 11, 10, 9, 8] # strand 2
@@ -27,16 +27,16 @@ order_parameters:
     nucleotide_indexes_1: [15, 14, 13, 12, 11, 10, 9, 8] # strand 2
 
 interfaces:
-  - op: "native"
+  - op: "num_hbs"
     value: 7
     compare: "<="
-  - op: "native"
+  - op: "num_hbs"
     value: 6
     compare: "<="
-  - op: "native"
+  - op: "num_hbs"
     value: 4
     compare: "<="
-  - op: "native"
+  - op: "num_hbs"
     value: 2
     compare: "<="
   - op: "distance"
