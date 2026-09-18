@@ -18,6 +18,10 @@ from .flux_generator import FFSFluxGenerator
 from ..defaults.defaults import default_input_exist
 from ..utils.oxlog import OxLogHandler
 
+import hashlib
+from collections import defaultdict
+from matplotlib.patches import Patch
+
 
 class FFSProgram:
     """
@@ -386,9 +390,6 @@ class FFSProgram:
 
     def plot_graph(self):
         G = self.process_graph
-        import hashlib
-        from collections import defaultdict
-        from matplotlib.patches import Patch
 
         fluxer_name = self.fluxer.name
 

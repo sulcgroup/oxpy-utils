@@ -49,6 +49,7 @@ def main():
         ffs_data["desired_n_successes"],
         Path(ffs_data["file_dir"])
     )
+    
     # populate input - do immediately after creation
     for key, val in ffs_data["input_file_params"].items():
         program.input_file_params[key] = val
@@ -72,6 +73,9 @@ def main():
         comparison = Comparison(iface["compare"])
         interfaces.append(FFSInterface(op, threshold, comparison))
     program.set_interfaces(*interfaces)
+    # set equilibriation steps if those are provided
+    if "eq_steps" in ffs_data:
+        program.fluxer.relax_steps = ffs_data["eq_steps"]
     program.load()
     program.auto_save = True # automatically update process graph and csv files
     program.run()

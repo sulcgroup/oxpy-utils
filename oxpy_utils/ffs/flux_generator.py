@@ -57,7 +57,7 @@ class FFSFluxGenerator(BaseFluxSampler):
                        lambda_0: FFSInterface,
                        lambda_neg1: FFSInterface,
                        lambda_s: FFSInterface,
-                       lambda_fail: Union[None, FFSInterface] = None):
+                       lambda_fail: None | FFSInterface = None):
         """"
         set interfaces
         Parameters:
