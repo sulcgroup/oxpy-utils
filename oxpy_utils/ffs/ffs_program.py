@@ -442,10 +442,6 @@ class FFSProgram:
         # --- 2. Step ordering and labels ---
         step_order = [fluxer_name] + [s.name for s in self.shooters]
         step_labels = {fluxer_name: "Flux", **{s.name: s.name for s in self.shooters}}
-        step_interface_labels = {
-            fluxer_name: str(self.fluxer.lambda_plus1),
-            **{s.name: str(s.lambda_plus1) for s in self.shooters}
-        }
 
         def node_step(n):
             if n == "origin":
@@ -465,13 +461,12 @@ class FFSProgram:
         FLUX_STEP_ORDER = ["equilibrate", "reset", "to_l-1_fwd", "flux_fwd", "flux_back"]
         FLUX_PRIMARY = {"flux_fwd", "flux_back"}
 
-        # fluxer_step -> x-column index (only include steps that actually appear)
+        # fluxer_step -> whether it appears at all (drives coloring/legend, keyed on the
+        # true fluxer_step attribute - unaffected by the success/fail column split below).
         flux_steps_present = []
         for fs in FLUX_STEP_ORDER:
             if any(G.nodes[n].get("fluxer_step") == fs for n in step_nodes[fluxer_name]):
                 flux_steps_present.append(fs)
-
-        flux_step_col = {fs: i for i, fs in enumerate(flux_steps_present)}
 
         def get_flux_step(n):
             return G.nodes[n].get("fluxer_step", "flux_fwd")
@@ -479,32 +474,58 @@ class FFSProgram:
         def flux_is_primary(n):
             return get_flux_step(n) in FLUX_PRIMARY
 
+        # --- x-column layout key ---
+        # lambda_fail is defined as ~lambda_neg1 (flux_generator.py's set_interfaces default) -
+        # same order parameter, same threshold value, just the logically-negated comparison. It
+        # is NOT a second, separate interface further out - there is no real gap in phase space
+        # between "native <= 7" and "native > 7", so they must be drawn as ONE line, not two.
+        # That single line separates:
+        #   - the native > 7 side: equilibrate, reset, and a FAILED flux_fwd (which re-crossed
+        #     lambda_neg1 backward, satisfying lambda_fail again)
+        #   - the native <= 7 side: to_l-1_fwd (whose entire job is to reach lambda_neg1, so it
+        #     ends up just past it), a SUCCESSFUL flux_fwd (further out, at lambda_0), and
+        #     flux_back (later still)
+        # flux_fwd's own outcome (the "success" attribute, already recorded via
+        # flux_generator.py's flux_report message) decides which side it lands on.
+        FLUX_COLUMN_ORDER = ["equilibrate", "reset", "flux_fwd_fail", "to_l-1_fwd", "flux_fwd_success", "flux_back"]
+
+        def flux_col_key(n):
+            fs = get_flux_step(n)
+            if fs == "flux_fwd":
+                return "flux_fwd_success" if G.nodes[n].get("success", False) else "flux_fwd_fail"
+            return fs
+
+        flux_columns_present = [
+            ck for ck in FLUX_COLUMN_ORDER
+            if any(flux_col_key(n) == ck for n in step_nodes[fluxer_name])
+        ]
+
         x_sub_gap = 1.0
         y_spacing = 2.5  # vertical units between stacked nodes — increase to spread out
         x_col_gap = 2.5  # gap between flux step-type columns
         x_step_gap_base = 4.0
 
-        # flux column layout: each fluxer_step gets a sub-band wide enough for all
-        # process_idxs that appear under that step, separated by x_col_gap.
+        # flux column layout: each column key gets a sub-band wide enough for all
+        # process_idxs that appear under it, separated by x_col_gap.
         flux_step_proc_idxs = defaultdict(set)
         for n in step_nodes[fluxer_name]:
-            flux_step_proc_idxs[get_flux_step(n)].add(n[1])
+            flux_step_proc_idxs[flux_col_key(n)].add(n[1])
 
-        flux_col_x0 = {}  # fluxer_step -> x offset of leftmost process_idx in that band
-        flux_col_width = {}  # fluxer_step -> width of that band
+        flux_col_x0 = {}  # column key -> x offset of leftmost process_idx in that band
+        flux_col_width = {}  # column key -> width of that band
         fc = 0.0
-        for fs in flux_steps_present:
-            flux_col_x0[fs] = fc
-            w = max(len(flux_step_proc_idxs.get(fs, {0})), 1) * x_sub_gap
-            flux_col_width[fs] = w
+        for ck in flux_columns_present:
+            flux_col_x0[ck] = fc
+            w = max(len(flux_step_proc_idxs.get(ck, {0})), 1) * x_sub_gap
+            flux_col_width[ck] = w
             fc += w + x_col_gap
         flux_total_width = fc - x_col_gap  # trim trailing gap
 
-        # dense rank of process_idx within each fluxer_step (so gaps don't create whitespace)
-        flux_step_proc_rank = {}  # (fs, proc_idx) -> x offset within that step's band
-        for fs, proc_idxs in flux_step_proc_idxs.items():
+        # dense rank of process_idx within each column (so gaps don't create whitespace)
+        flux_step_proc_rank = {}  # (column key, proc_idx) -> x offset within that column's band
+        for ck, proc_idxs in flux_step_proc_idxs.items():
             for rank, proc_idx in enumerate(sorted(proc_idxs)):
-                flux_step_proc_rank[(fs, proc_idx)] = rank * x_sub_gap
+                flux_step_proc_rank[(ck, proc_idx)] = rank * x_sub_gap
 
         # shooter column widths
         step_process_idxs = defaultdict(set)
@@ -540,6 +561,16 @@ class FFSProgram:
                 for rank, sim_idx in enumerate(sorted(sim_idxs)):
                     shoot_rank_map[(step, proc_idx)][sim_idx] = rank
 
+        # Dense rank of process_idx within each shooter step (mirrors flux_step_proc_rank),
+        # so a sparse subset of process_idxs (as the BFS filter usually leaves) doesn't spread
+        # nodes out to their raw index value - which is what step_width above is NOT sized for.
+        step_proc_rank: dict[str, dict[int, int]] = {}
+        for step in step_order[1:]:
+            step_proc_rank[step] = {
+                proc_idx: rank
+                for rank, proc_idx in enumerate(sorted(step_process_idxs.get(step, set())))
+            }
+
         # --- 6. Jitter ---
         def _jitter(n, scale=0.35):
             h = int(hashlib.md5(str(n).encode()).hexdigest(), 16)
@@ -549,16 +580,16 @@ class FFSProgram:
         pos = {}
         flux_x0 = step_x_origin[fluxer_name]
         for n in step_nodes[fluxer_name]:
-            fs = get_flux_step(n)
-            proc_x = flux_step_proc_rank.get((fs, n[1]), 0)
-            x = flux_x0 + flux_col_x0.get(fs, 0) + proc_x
+            ck = flux_col_key(n)
+            proc_x = flux_step_proc_rank.get((ck, n[1]), 0)
+            x = flux_x0 + flux_col_x0.get(ck, 0) + proc_x
             y = -flux_global_rank[n[2]] * y_spacing + _jitter(n)
             pos[n] = (x, y)
 
         for step in step_order[1:]:
             x0 = step_x_origin[step]
             for n in step_nodes[step]:
-                x = x0 + n[1] * x_sub_gap
+                x = x0 + step_proc_rank[step][n[1]] * x_sub_gap
                 y = -shoot_rank_map[(step, n[1])][n[2]] * y_spacing + _jitter(n)
                 pos[n] = (x, y)
 
@@ -682,42 +713,34 @@ class FFSProgram:
         # --- 11. Vertical dividers ---
         y_max_plot = max(y_all) + 0.5
 
-        # Flux left border = lambda_fail
-        x_flux_left = flux_x0 - x_step_gap_base / 2
-        ax.axvline(x=x_flux_left, color="black", linestyle="--", linewidth=0.8, alpha=0.4)
-        ax.text(x_flux_left, y_max_plot, str(self.fluxer.lambda_fail),
-                ha="center", va="bottom", fontsize=8, color="black", alpha=0.7, rotation=90)
-
-        # Internal flux dividers between step-type columns, labelled with interface names
-        # Layout left->right:
-        # lambda_fail | equil, reset | (visual sep) | to_l-1_fwd | lambda_neg1 | flux_fwd, flux_back | lambda_plus1
-        # Single internal flux divider: to_l-1_fwd | lambda_n | flux_fwd, flux_back
-        left_present = [fs for fs in ["equilibrate", "reset", "to_l-1_fwd"] if fs in flux_col_x0]
-        right_present = [fs for fs in ["flux_fwd", "flux_back"] if fs in flux_col_x0]
+        # Internal flux divider between step-type columns, labelled with interface names.
+        # lambda_fail is the same interface as lambda_neg1 (just the negated comparison, see
+        # the FLUX_COLUMN_ORDER comment above) - there is only ONE line here, not a left
+        # "lambda_fail" border plus a separate internal "lambda_neg1" one.
+        # Layout left->right: equil, reset, flux_fwd(fail) | lambda_neg1 | to_l-1_fwd, flux_fwd(success), flux_back | lambda_0
+        # (lambda_0 is drawn separately below, as the flux column's right separator.)
+        left_present = [ck for ck in ["equilibrate", "reset", "flux_fwd_fail"] if ck in flux_col_x0]
+        right_present = [ck for ck in ["to_l-1_fwd", "flux_fwd_success", "flux_back"] if ck in flux_col_x0]
         if left_present and right_present:
             x_left_edge = flux_x0 + max(flux_col_x0[fs] + flux_col_width[fs] for fs in left_present)
             x_right_edge = flux_x0 + min(flux_col_x0[fs] for fs in right_present)
             x_div = (x_left_edge + x_right_edge) / 2
             ax.axvline(x=x_div, color="black", linestyle=":", linewidth=0.8, alpha=0.4)
-            ax.text(x_div, y_max_plot, str(self.fluxer.lambda_n),
+            ax.text(x_div, y_max_plot, str(self.fluxer.lambda_neg1),
                     ha="center", va="bottom", fontsize=8, color="black", alpha=0.7, rotation=90)
 
         # Separators between steps.
-        # A node in column i has already crossed step[i].lambda_plus1, so that interface
-        # belongs to the LEFT of column i (i.e. the right side of column i-1).
-        # Concretely: the line between step[i] and step[i+1] is labelled step[i+1].lambda_plus1.
-        # The flux column's right separator is shoot1.lambda_plus1 (= the first interface to shoot).
-        # The final shooter has no right separator — just success arrows.
-        steps_with_nodes = [s for s in step_order if s in step_nodes]
-        # build label for the line to the RIGHT of each step (None = no line)
+        # Each step's OWN lambda_plus1 is the interface its successes cross to seed the next
+        # step (e.g. fluxer's flux_fwd successes at lambda_0 are shoot1's starting confs), so
+        # the line to the RIGHT of step[i] is labelled step[i].lambda_plus1 - not step[i+1]'s.
         # step_order: [fluxer, shoot1, shoot2, ..., shootN]
-        # line to right of step[i] = lambda_plus1 of step[i+1], except final shooter has none
+        # The flux column's right separator is fluxer.lambda_plus1 (= lambda_0, the first interface to shoot).
+        # The final shooter's right separator is its own lambda_plus1 (= lambda_s, overall success).
         step_objects = {fluxer_name: self.fluxer, **{s.name: s for s in self.shooters}}
-        for i, step in enumerate(step_order[:-1]):  # all except final shooter
+        for step in step_order:
             if step not in step_nodes:
                 continue
-            next_step = step_order[i + 1]
-            label = str(step_objects[next_step].lambda_plus1)
+            label = str(step_objects[step].lambda_plus1)
             x_right = step_x_origin[step] + step_width[step] + x_step_gap_base / 2
             ax.axvline(x=x_right, color="black", linestyle="--", linewidth=0.8, alpha=0.5)
             ax.text(x_right, y_max_plot, label,

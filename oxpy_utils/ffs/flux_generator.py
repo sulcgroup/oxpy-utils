@@ -399,9 +399,9 @@ class FFSFluxGenerator(BaseFluxSampler):
                         ))
                     sim_counter += 1
                     # run
-                    eq_sim.oxpy_run.run(subprocess=False)
+                    sim.oxpy_run.run(subprocess=False)
 
-                    op_values = read_output(init_sim)
+                    op_values = read_output(sim)
                     # complete_failure = lambda_f.test(op_values[lambda_f.op.name])
                     complete_success = self.lambda_s.test(op_values[self.lambda_s.op.name])
 
