@@ -798,6 +798,32 @@ class TestVMMCGraphReweightOpTrajectorySource:
 
         np.testing.assert_allclose(result_energy, result_traj)
 
+    @patch.object(VMMCGraphReweight, 'get_overall_unwt_occ')
+    def test_mindistance_raw_values_binned_by_interfaces(self, mock_occ, tmp_path):
+        # Regression test: the op_trajectory observable prints a mindistance op's raw
+        # distance, not its state index. With interfaces [4, 7], a bonds=0 frame at
+        # distance 3.9 is dist state 0 -- truncating it to int gave state 3, which is out
+        # of range, so every bonds 0<->1 crossing from such a frame was silently dropped.
+        mock_occ.return_value = np.ones((3, 3))
+        gr = _make_gr(tmp_path)
+        gr.add_order_parameter(OrderParameter("dist", "mindistance", [(0, 5)], interfaces=[4., 7.]))
+        gr.op_trajectory_name = "op_trajectory"
+        # bonds > 0 forces dist state 0, as in a real windowed system; the legal graph is a tree
+        gr.filter_legal_states = lambda states: [s for s in states if s[0] == 0 or s[1] == 0]
+        # bonds=0 (at raw distance 3.9) visited twice as often as bonds=1, with the same
+        # crossings both ways -> bonds=1 is under-sampled and should get a higher weight
+        frames = [(0, 3.9), (0, 3.9), (1, 0.4)] * 30
+        raw = pd.DataFrame({0: range(len(frames)),
+                            1: [b for b, _ in frames],
+                            2: [d for _, d in frames]})
+        sim = MagicMock()
+        sim.analysis.observable_data.return_value = raw
+        sim.weights = np.ones((3, 3))
+
+        result = gr.compute_next_it_weights([sim])
+
+        assert result[1, 0] / result[0, 0] == pytest.approx(2.0, rel=0.05)
+
 
 class TestVMMCGraphReweightComputeWeights:
     def _run(self, tmp_path, state_seq, start_weights=None):
@@ -881,6 +907,46 @@ class TestVMMCGraphReweightComputeWeights:
         assert result[2] == pytest.approx(1.0, rel=1e-4)
         assert result[1] == pytest.approx(2.0, rel=1e-4)
         assert result[0] == pytest.approx(4.0, rel=1e-4)
+
+    @staticmethod
+    def _equilibrium_seq_under_weights_1_4_1(n_cycles=200):
+        # What a flat-p_eq system looks like when run under weights [1, 4, 1]: VMMC folds
+        # the weights into acceptance, so the *sampled* population is 1:4:1 and crossings
+        # balance in both directions on every edge.
+        return [(0,), (1,), (1,), (2,), (1,), (1,)] * n_cycles
+
+    @patch.object(VMMCGraphReweight, 'get_overall_unwt_occ')
+    def test_correction_is_relative_to_sampled_weights(self, mock_occ, tmp_path):
+        # Regression test: the per-visit rate ratio measures the *biased* population the
+        # replicas sampled, so it is a correction on top of the weights they ran under.
+        # Here p_eq is flat and the run over-weighted state 1 by 4x; the right update
+        # removes that bias (-> flat). Treating the rate ratio as an absolute target
+        # instead would push w[1] down to ~1/4 of its neighbours.
+        mock_occ.return_value = np.ones(3)
+        gr = _make_gr(tmp_path)
+        gr.max_log_weight_step = float("inf")
+        sim = _mock_sim_with_energy_df(self._equilibrium_seq_under_weights_1_4_1())
+        sim.weights = np.array([1.0, 4.0, 1.0])
+
+        result = gr.compute_next_it_weights([sim])
+
+        assert result[1] / result[0] == pytest.approx(1.0, rel=0.03)
+        assert result[2] / result[0] == pytest.approx(1.0, rel=0.03)
+
+    @patch.object(VMMCGraphReweight, 'get_overall_unwt_occ')
+    def test_max_log_weight_step_caps_change_from_previous_weights(self, mock_occ, tmp_path):
+        # Same scenario with the default log(2) trust region: the wanted move is 4x -> 1x,
+        # so one iteration may only go half way (4x -> 2x), measured from the previous
+        # weights rather than from flat.
+        mock_occ.return_value = np.ones(3)
+        gr = _make_gr(tmp_path)
+        sim = _mock_sim_with_energy_df(self._equilibrium_seq_under_weights_1_4_1())
+        sim.weights = np.array([1.0, 4.0, 1.0])
+
+        result = gr.compute_next_it_weights([sim])
+
+        assert result[1] / result[0] == pytest.approx(2.0, rel=0.03)
+        assert result[1] / result[2] == pytest.approx(2.0, rel=0.03)
 
     def test_rare_event_triggers_warning_and_damping(self, tmp_path):
         # Iteration 0: state 0 essentially unvisited (one stray visit) -> almost no
@@ -1007,6 +1073,32 @@ class TestVMMCGraphReweightComputeWeights:
         ratio_big = result_big[0] / result_big[1]
         assert ratio_big > ratio_small
         assert ratio_big / ratio_small == pytest.approx(20.0 / 2.0, rel=0.05)
+
+    @patch.object(VMMCGraphReweight, 'get_overall_unwt_occ')
+    def test_undersampled_judged_on_history_not_just_last_iteration(self, mock_occ, tmp_path):
+        # Regression test: a state well sampled earlier in the run but missed by the latest
+        # iteration still has evidence behind it, so the graph solve -- not the escalating
+        # floor -- should set its weight. Judging reliability on last_it alone floored every
+        # state a collapsed iteration missed, and the run could never recover.
+        sim0 = _mock_sim_with_energy_df([(0,), (1,), (2,), (1,)] * 50)   # all states, balanced
+        sim1 = _mock_sim_with_energy_df([(1,), (2,)] * 50)               # state 0 missed
+        occ = {id(sim0): np.array([1.0, 1.0, 1.0]), id(sim1): np.array([0.0, 1.0, 1.0])}
+        mock_occ.side_effect = lambda it: occ[id(it[0])]
+
+        gr_last_only = _make_gr(tmp_path)
+        gr_last_only.undersampled_boost_factor = 20.0
+        result_last_only = gr_last_only.compute_next_it_weights([sim1])
+
+        gr_history = _make_gr(tmp_path)
+        gr_history.undersampled_boost_factor = 20.0
+        gr_history._subgroups = [[sim0], [sim1]]
+        result_history = gr_history.compute_next_it_weights([sim1])
+
+        # without history, state 0 is floored at 20x its previous weight...
+        assert result_last_only[0] / result_last_only[1] > 10
+        # ...with history, iteration 0's evidence sets it instead: there state 1 got twice
+        # state 0's visits, so flat sampling wants w[0] = 2 w[1]
+        assert result_history[0] / result_history[1] == pytest.approx(2.0, rel=0.05)
 
     @patch.object(VMMCGraphReweight, 'get_overall_unwt_occ')
     def test_undersampled_boost_does_not_override_a_higher_graph_solve(self, mock_occ, tmp_path):

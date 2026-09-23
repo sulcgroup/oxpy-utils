@@ -756,24 +756,44 @@ class VMMCGraphReweight(VMMCAutoReweight):
         # iteration (including ones reloaded via load()), so accumulate over that;
         # fall back to just last_it when there's no recorded history yet (e.g. a
         # bare compute_next_it_weights() call in a unit test).
+        #
+        # Counts are kept separately per iteration, though (per_iteration below): each
+        # iteration ran under its own weights, and its transition rates are only
+        # interpretable relative to those weights -- see the edge-construction note.
         history = self._subgroups if self._subgroups else [last_it]
 
-        transition_counts: dict[tuple, int] = {}
+        # (transition counts, visit counts, weights that iteration ran under), one per iteration
+        per_iteration: list[tuple[dict[tuple, int], dict[tuple, int], np.ndarray]] = []
         visit_counts: dict[tuple, int] = {}
         latest_visit_counts: dict[tuple, int] = {}
         for it_replicas in history:
             is_latest = it_replicas is history[-1]
+            it_transitions: dict[tuple, int] = {}
+            it_visits: dict[tuple, int] = {}
             for sim in it_replicas:
                 if self.op_trajectory_name is not None:
-                    # columns: 0 = step, 1..N = order parameter values, in op_names order
+                    # columns: 0 = step, 1..N = order parameter values, in op_names order.
+                    # Unlike energy_df (which oxDNA writes as state indices), the
+                    # "order_parameters" observable column prints a mindistance op's raw
+                    # distance, not its state index -- bin it the way oxDNA does
+                    # (MinDistanceParameter::calculate_state: index = number of interfaces
+                    # strictly below the value). Truncating with astype(int) instead would
+                    # mislabel e.g. a 3.9 distance as state 3 rather than state 0.
                     raw = sim.analysis.observable_data(self.op_trajectory_name)
-                    cols = [raw[i + 1].astype(int).values for i in range(len(op_names))]
+                    cols = []
+                    for i, op in enumerate(ops):
+                        vals = raw[i + 1].values
+                        if op.order_parameter == "mindistance" and op.interfaces is not None:
+                            cols.append(np.searchsorted(op.interfaces, vals, side="left"))
+                        else:
+                            cols.append(vals.astype(int))
                 else:
                     df = sim.analysis.energy_df
                     cols = [df[name].astype(int).values for name in op_names]
-                state_seq = list(zip(*cols))
+                state_seq = [tuple(int(v) for v in s) for s in zip(*cols)]
                 for s in state_seq:
                     visit_counts[s] = visit_counts.get(s, 0) + 1
+                    it_visits[s] = it_visits.get(s, 0) + 1
                     if is_latest:
                         latest_visit_counts[s] = latest_visit_counts.get(s, 0) + 1
                 for k in range(len(state_seq) - 1):
@@ -783,7 +803,8 @@ class VMMCGraphReweight(VMMCAutoReweight):
                     if sum(abs(s_from[d] - s_to[d]) for d in range(ndim)) != 1:
                         continue
                     key = (s_from, s_to)
-                    transition_counts[key] = transition_counts.get(key, 0) + 1
+                    it_transitions[key] = it_transitions.get(key, 0) + 1
+            per_iteration.append((it_transitions, it_visits, np.asarray(it_replicas[0].weights, dtype=float)))
 
         # Warn when a state's evidence base is dominated by a sudden influx of new
         # visits from just this iteration — e.g. VMMC finally crossing into a state it
@@ -823,19 +844,37 @@ class VMMCGraphReweight(VMMCAutoReweight):
         # the weights to flat even when the true equilibrium population is very skewed.
         #
         # Instead we use per-visit transition rates (Transition-Matrix-Monte-Carlo style):
-        # T(i->j) = c[i->j] / (visits to i). Detailed balance of the underlying dynamics
-        # gives p_eq(i) * T(i->j) = p_eq(j) * T(j->i), so T(i->j)/T(j->i) recovers the true
-        # (unbiased) equilibrium population ratio p_eq(j)/p_eq(i), independent of whatever
-        # bias the current weights already impose. Flat-sampling weights are w ~ 1/p_eq.
+        # T(i->j) = c[i->j] / (visits to i). Detailed balance gives
+        # p(i) * T(i->j) = p(j) * T(j->i), so T(i->j)/T(j->i) = p(j)/p(i) -- but p here is
+        # the *biased* population the replicas actually sampled, not p_eq: oxDNA's VMMC
+        # multiplies every move's acceptance by w_new/w_old (VMMC_CPUBackend.cpp,
+        # `pprime *= weight / oldweight`), so p(i) ~ p_eq(i) * w(i) under the weights that
+        # iteration ran with. Flat sampling needs w_new ~ 1/p_eq ~ w / p, i.e.
+        #
+        #     log w_new[j] - log w_new[i] = log(w[j]/w[i]) + log(T(j->i)/T(i->j))
+        #
+        # The rate ratio is a *correction on top of the sampled weights*, never an absolute
+        # target by itself -- using it as one throws away whatever bias the weights already
+        # encode and resets toward the unbiased landscape every iteration. Since each
+        # iteration ran under different weights, the flat-sampling log-ratio is computed
+        # per iteration (with that iteration's own weights) and then averaged, weighted by
+        # how many crossings of the edge that iteration actually saw.
         #
         # That estimator is only as good as the number of transition events behind it —
         # an edge crossed ~50 times in each direction still has ~15-20% sampling noise per
         # direction, and exponentiating a noisy log-ratio compounds that multiplicatively.
-        # Applying the raw point estimate as this iteration's weight ratio, undamped, can
-        # turn a modest, noisy imbalance into a large, overconfident correction that then
-        # gets *run* for a full iteration — clip each edge's contribution to at most
-        # max_log_weight_step so a single edge's estimate can't move that far in one step,
-        # regardless of how large graph_pseudo_count-smoothed counts make it look.
+        # Applying the raw point estimate undamped can turn a modest, noisy imbalance into
+        # a large, overconfident correction that then gets *run* for a full iteration — so
+        # clip the *change* relative to the previous iteration's log-ratio to at most
+        # max_log_weight_step. An edge no iteration ever crossed has no evidence and keeps
+        # its previous log-ratio.
+        prev_weights = np.asarray(last_it[0].weights, dtype=float)
+
+        def log_ratio(w: np.ndarray, i: tuple, j: tuple) -> Optional[float]:
+            if w[i] > 0 and w[j] > 0 and np.isfinite(w[i]) and np.isfinite(w[j]):
+                return float(np.log(w[j] / w[i]))
+            return None
+
         edges: list[tuple[int, int, float]] = []
         for state in legal_states:
             for dim in range(ndim):
@@ -844,16 +883,25 @@ class VMMCGraphReweight(VMMCAutoReweight):
                 nbr = tuple(nbr)
                 if not (all(0 <= nbr[d] < shape[d] for d in range(ndim)) and nbr in legal_set):
                     continue
-                c_ij = transition_counts.get((state, nbr), 0)
-                c_ji = transition_counts.get((nbr, state), 0)
-                n_i = visit_counts.get(state, 0)
-                n_j = visit_counts.get(nbr, 0)
-                t_ij = (c_ij + eps) / (n_i + eps)
-                t_ji = (c_ji + eps) / (n_j + eps)
-                # t_ij > t_ji → nbr has higher equilibrium population → want w[nbr] < w[state]
-                target = np.log(t_ji / t_ij)
-                target = np.clip(target, -self.max_log_weight_step, self.max_log_weight_step)
-                edges.append((state_to_idx[state], state_to_idx[nbr], target))
+                weighted_sum, n_crossings = 0.0, 0
+                for it_transitions, it_visits, it_weights in per_iteration:
+                    c_ij = it_transitions.get((state, nbr), 0)
+                    c_ji = it_transitions.get((nbr, state), 0)
+                    sampled_log_ratio = log_ratio(it_weights, state, nbr)
+                    if c_ij + c_ji == 0 or sampled_log_ratio is None:
+                        continue
+                    t_ij = (c_ij + eps) / (it_visits.get(state, 0) + eps)
+                    t_ji = (c_ji + eps) / (it_visits.get(nbr, 0) + eps)
+                    # t_ij > t_ji → nbr over-sampled under these weights → lower w[nbr] relative to w[state]
+                    weighted_sum += (c_ij + c_ji) * (sampled_log_ratio + np.log(t_ji / t_ij))
+                    n_crossings += c_ij + c_ji
+                prev_log_ratio = log_ratio(prev_weights, state, nbr) or 0.0
+                if n_crossings:
+                    correction = weighted_sum / n_crossings - prev_log_ratio
+                else:
+                    correction = 0.0
+                correction = np.clip(correction, -self.max_log_weight_step, self.max_log_weight_step)
+                edges.append((state_to_idx[state], state_to_idx[nbr], prev_log_ratio + correction))
 
         unwt_occ = self.get_overall_unwt_occ(last_it)
 
@@ -886,7 +934,24 @@ class VMMCGraphReweight(VMMCAutoReweight):
         # to reach them. Floor them at an escalated version of their previous weight instead
         # (never *decrease* while still unreliable), using np.maximum rather than an outright
         # override so a solve that *did* land on something reasonably high isn't thrown away.
-        unreliable_desired = (unwt_occ < self.undersampled_occ_threshold) & self.desired_states_mask
+        #
+        # "Unreliable" is judged on occupancy accumulated over the same history the graph
+        # solve draws its evidence from, not just last_it. Otherwise one iteration that
+        # collapses into a few states marks nearly every state unreliable, the floor
+        # overrides the solve for all of them -- a uniform rescale that changes nothing --
+        # and the run can never recover, even though earlier iterations hold plenty of
+        # evidence for those states. Each iteration's occupancy (normalized to its own
+        # busiest state) counts equally, matching the equal step budget per iteration.
+        if len(history) > 1:
+            # nan_to_num: an iteration with no recorded visits normalizes to 0/0
+            history_occ = sum(np.nan_to_num(self.get_overall_unwt_occ(it_replicas)) for it_replicas in history)
+            if history_occ.max() > 0:
+                history_occ = history_occ / history_occ.max()
+            else:
+                history_occ = unwt_occ  # no occupancy data at all: same as the single-iteration case
+        else:
+            history_occ = unwt_occ
+        unreliable_desired = (history_occ < self.undersampled_occ_threshold) & self.desired_states_mask
         boosted_floor = last_it[0].weights[unreliable_desired] * self.undersampled_boost_factor
         new_weights[unreliable_desired] = np.maximum(new_weights[unreliable_desired], boosted_floor)
 
