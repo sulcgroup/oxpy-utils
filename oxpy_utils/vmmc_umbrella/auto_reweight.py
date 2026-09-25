@@ -909,7 +909,13 @@ class VMMCGraphReweight(VMMCAutoReweight):
             return last_it[0].weights.copy()
 
         # Least-squares: for each edge, log_w[j] - log_w[i] = target
-        # Plus one normalization row: mean log-weight over desired states = 0
+        # Plus one normalization row pinning the overall scale: mean log-weight over desired
+        # states = that of the previous weights. The edges only fix weight *ratios*; the
+        # scale matters because the undersampled floor and the rare-event damping below
+        # compare the solve's weights against the previous weights directly. Pinning the
+        # mean to 0 instead put the solve at ~1 while previous weights can be ~1e20 or
+        # more, so max(solve, 3 * previous) always took the floor and every floored state
+        # jumped tens of decades above the rest.
         n_edges = len(edges)
         A = np.zeros((n_edges + 1, n))
         b = np.zeros(n_edges + 1)
@@ -917,9 +923,14 @@ class VMMCGraphReweight(VMMCAutoReweight):
             A[row, j] = 1.0
             A[row, i] = -1.0
             b[row] = target
-        desired_idxs = [state_to_idx[s] for s in self.desired_state_list if s in legal_set]
-        A[-1, desired_idxs] = 1.0 / len(desired_idxs)
-        b[-1] = 0.0
+        desired_states = [s for s in self.desired_state_list if s in legal_set]
+        anchor_states = [s for s in desired_states if prev_weights[s] > 0 and np.isfinite(prev_weights[s])]
+        if anchor_states:
+            A[-1, [state_to_idx[s] for s in anchor_states]] = 1.0 / len(anchor_states)
+            b[-1] = np.mean([np.log(prev_weights[s]) for s in anchor_states])
+        else:
+            A[-1, [state_to_idx[s] for s in desired_states]] = 1.0 / len(desired_states)
+            b[-1] = 0.0
 
         log_w_vec, _, _, _ = np.linalg.lstsq(A, b, rcond=None)
 

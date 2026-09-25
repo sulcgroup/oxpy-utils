@@ -1101,6 +1101,25 @@ class TestVMMCGraphReweightComputeWeights:
         assert result_history[0] / result_history[1] == pytest.approx(2.0, rel=0.05)
 
     @patch.object(VMMCGraphReweight, 'get_overall_unwt_occ')
+    def test_undersampled_floor_on_same_scale_as_solve(self, mock_occ, tmp_path):
+        # Regression test: the graph solve's overall scale must match the previous
+        # weights', since the floor compares the two directly. Real weights are often
+        # ~1e20; with the solve pinned at mean log-weight 0 (weights ~1), the floor
+        # (3 x previous) won by ~20 decades and the unsampled state ended up ~1e20 x its
+        # neighbours instead of the intended undersampled_boost_factor x.
+        seq = [(1,), (2,)] * 50                          # state 0 never visited
+        mock_occ.return_value = np.array([0.0, 1.0, 1.0])
+        gr = _make_gr(tmp_path)
+        gr.undersampled_boost_factor = 3.0
+        sim = _mock_sim_with_energy_df(seq)
+        sim.weights = np.array([1e20, 1e20, 1e20])
+
+        result = gr.compute_next_it_weights([sim])
+
+        assert result[0] / result[1] == pytest.approx(3.0, rel=0.05)
+        assert result[1] / result[2] == pytest.approx(1.0, rel=0.05)
+
+    @patch.object(VMMCGraphReweight, 'get_overall_unwt_occ')
     def test_undersampled_boost_does_not_override_a_higher_graph_solve(self, mock_occ, tmp_path):
         # Regression test for the max()-floor (not override): if the graph solve already
         # landed on something higher than the escalated floor, keep it -- don't clobber a
