@@ -1,6 +1,8 @@
 import glob
 import multiprocessing
+import os
 import re
+import signal
 import time
 from abc import ABC, abstractmethod
 from multiprocessing import Lock, Value
@@ -105,6 +107,9 @@ class BaseFluxSampler(ABC):
 
         self.input_file_params = {}
 
+        # signals timer() to stop cooperatively (see stop_timer_process())
+        self._timer_stop_event = multiprocessing.Event()
+
 
     def init(self):
         """
@@ -165,19 +170,53 @@ class BaseFluxSampler(ABC):
     # timer function: it spits out things
     def timer(self):
         """
-        builds a timer process and logs time + status every 10 seconds
-        todo: customized sleep period
+        builds a timer process and logs time + status every 10 seconds, until
+        stop_timer_process() signals it to stop (see that method for why this
+        is cooperative rather than relying solely on Process.terminate()).
         """
         logger = self.loghandler.spinoff("timer")
         logger.info(f"Timer started at {(time.asctime(time.localtime()))}")
         itime = time.time()
-        while True:  # arbrgfgfgwse
-            time.sleep(10)
+        # Event.wait(10) is like sleep(10) but returns immediately (True) once
+        # the stop event is set, instead of always waiting the full interval.
+        while not self._timer_stop_event.wait(10):
             with self.success_lock:
                 self.log_time(logger, itime)
-                # if self.success_count.value() >= self.desired_success_count:
-                #     break
-        # logger.info("Timer Complete!")
+        logger.info("Timer stopped")
+
+    def stop_timer_process(self, tp: multiprocessing.Process, logger: logging.Logger):
+        """
+        Stop a timer process started via `Process(target=self.timer)`.
+
+        Signals cooperative shutdown first (fast and reliable, since it doesn't
+        depend on OS signal delivery or multiprocessing's own bookkeeping), then
+        escalates to terminate() and, as a last resort, a raw SIGKILL sent
+        directly via os.kill() -- bypassing Process.terminate()/kill(), which
+        share an internal "if self.returncode is None" guard that can end up
+        permanently False (and so silently skip sending the signal at all) once
+        many other worker processes have been forked and reaped in the same
+        run. Confirmed in production: terminate() was called and logged every
+        time, yet the timer process was still alive with the *default* SIGTERM
+        disposition (no handler of its own) minutes later; a signal sent from
+        outside Process's own bookkeeping (`kill -TERM <pid>`, equivalent to
+        the raw os.kill() below) killed it immediately every time.
+        """
+        logger.info("Terminating timer")
+        self._timer_stop_event.set()
+        tp.join(timeout=15)
+        if tp.is_alive():
+            logger.warning("Timer did not stop cooperatively; sending SIGTERM")
+            tp.terminate()
+            tp.join(timeout=5)
+        if tp.is_alive() and tp.pid is not None:
+            logger.warning("Timer did not respond to SIGTERM; sending SIGKILL directly")
+            try:
+                os.kill(tp.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            tp.join(timeout=5)
+        if tp.is_alive():
+            logger.error(f"Timer process {tp.pid} could not be stopped")
 
     def log_time(self, logger: logging.Logger, start_time: float):
         """

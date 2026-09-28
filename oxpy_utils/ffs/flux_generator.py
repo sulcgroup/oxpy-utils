@@ -136,26 +136,26 @@ class FFSFluxGenerator(BaseFluxSampler):
 
         tp = Process(target=self.timer)
         tp.start()
-        if self.ncpus > 1:
-            # construct one process for each cpu
-            for i in range(self.ncpus):
-                p = Process(target=self.ffs_process, args=(i, self.loghandler.spinoff(f"Worker{i}")))
-                processes.append(p)
+        try:
+            if self.ncpus > 1:
+                # construct one process for each cpu
+                for i in range(self.ncpus):
+                    p = Process(target=self.ffs_process, args=(i, self.loghandler.spinoff(f"Worker{i}")))
+                    processes.append(p)
 
 
-            main_log.info("Main: Starting processes...")
-            for p in processes:
-                p.start()
+                main_log.info("Main: Starting processes...")
+                for p in processes:
+                    p.start()
 
-            main_log.info("Main: waiting for processes to finish")
-            for p in processes:
-                p.join()
-        else:
-            # for debugging: allow serial processing
-            self.ffs_process(0, self.loghandler.spinoff("worker"))
-
-        main_log.info("Main: Terminating timer")
-        tp.terminate()  # terminate timer
+                main_log.info("Main: waiting for processes to finish")
+                for p in processes:
+                    p.join()
+            else:
+                # for debugging: allow serial processing
+                self.ffs_process(0, self.loghandler.spinoff("worker"))
+        finally:
+            self.stop_timer_process(tp, main_log)
 
         # print >> sys.stderr, "nstarted: %d, nsuccesses: %d success_prob: %g" % (nstarted, nsuccesses, nsuccesses/float(nstarted))
         main_log.info("terminating processes")
