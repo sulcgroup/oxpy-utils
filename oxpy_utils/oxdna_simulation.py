@@ -1442,7 +1442,7 @@ class SimulationManager:
         self.sim_queue.put(sim)
 
     def worker_manager(self, gpu_mem_block=False, custom_observables=None, run_when_failed=False, cpu_run=False,
-                       use_mps=True):
+                       use_mps=True, drain_timeout=None):
         """
         Head process in charge of allocating queued simulations to processes and gpu memory.
 
@@ -1450,6 +1450,11 @@ class SimulationManager:
         nvidia-cuda-mps-control daemon for the duration of this batch so concurrent GPU
         worker processes share contexts via MPS. Ignored for cpu_run. Pass False to manage
         MPS yourself (or run without it) instead of having this call start/stop a daemon.
+        :param drain_timeout: max seconds to wait, after the sim_queue is empty, for the
+        last dispatched workers to finish (default None: wait indefinitely, matching prior
+        behavior -- appropriate for long production simulations). If a worker hangs past
+        this timeout it's forcibly terminated by the existing cleanup in the finally block
+        below, instead of blocking this process forever.
         """
         tic = timeit.default_timer()
         if cpu_run is True:
@@ -1517,10 +1522,22 @@ class SimulationManager:
                 elif cpu_run:
                     sleep(0.1) # Shorter sleep for CPU runs
             
+            drain_deadline = None if drain_timeout is None else timeit.default_timer() + drain_timeout
             while not self.process_queue.empty():
+                if not any(p.is_alive() for p in self.worker_process_list):
+                    # Every tracked worker has already exited (e.g. crashed before
+                    # reaching its own process_queue.get()) yet the queue never fully
+                    # drained -- nothing left that could ever drain it. Stop waiting.
+                    print("All worker processes exited without fully draining "
+                          "process_queue; stopping wait.")
+                    break
+                if drain_deadline is not None and timeit.default_timer() > drain_deadline:
+                    print(f"Timed out after {drain_timeout}s waiting for worker "
+                          f"processes to drain; forcing cleanup of any still running.")
+                    break
                 sleep(10)
-           
-        except KeyboardInterrupt:                        
+
+        except KeyboardInterrupt:
             KeyboardInterruptmessage = 'KeyboardInterrupt caught, terminating all processes'
             self.handle_death(exception=KeyboardInterrupt, message=KeyboardInterruptmessage)
             
@@ -1621,10 +1638,14 @@ class SimulationManager:
             gpu_mem_block=False,
             custom_observables=None,
             run_when_failed=False,
-            cpu_run=False):
+            cpu_run=False,
+            drain_timeout=None):
         """
         Run the worker manager in a subprocess
         todo: ...logging?
+
+        :param drain_timeout: see worker_manager() -- forwarded as-is. Default None
+        preserves the previous unbounded wait.
         """
         print('spawning')
         if cpu_run is True:
@@ -1634,7 +1655,8 @@ class SimulationManager:
                        kwargs={'gpu_mem_block': gpu_mem_block,
                                'custom_observables': custom_observables,
                                'run_when_failed': run_when_failed,
-                               'cpu_run': cpu_run
+                               'cpu_run': cpu_run,
+                               'drain_timeout': drain_timeout
                                })
         self.manager_process = p
         p.start()
