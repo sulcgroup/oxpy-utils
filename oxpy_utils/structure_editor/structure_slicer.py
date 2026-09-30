@@ -80,17 +80,20 @@ class StructureSlicer(BuildSimulation):
         """
         assert corner_1.shape == corner_2.shape == (3,)
         assert behavior in ["union", "intersection", "replace"], f"Invalid set_slice behavior {behavior}"
-        assert (corner_1 >= 0).all() and (corner_2 >= 0).all(), "Corners of set_slice zone not inboxed"
         assert not (corner_1 == corner_2).any(), "A box dimension has zero size"
-        corner_1, corner_2 = np.stack([corner_1, corner_2]).min(axis=0), np.stack([corner_2, corner_1]).max(axis=0)
+        lo, hi = np.minimum(corner_1, corner_2), np.maximum(corner_1, corner_2)
         base_positions = self.starting_structure().poss()
-        select = reverse == (corner_1[:, np.newaxis] <= base_positions) & (base_positions <= corner_2[:, np.newaxis])
-        idxs = select.nonzero()
-        if behavior == "union":
-            idxs |= self.__slice_bases
-        elif behavior == "intersection":
-            idxs &= self.__slice_bases
-        self.set_slice(idxs)
+        inside = ((lo <= base_positions) & (base_positions <= hi)).all(axis=1)
+        select = ~inside if reverse else inside
+        self.set_slice(self._combine(np.nonzero(select)[0], behavior))
+
+    def _combine(self, idxs: np.ndarray, behavior: str) -> np.ndarray:
+        """combines newly selected oxview indexes with the current selection"""
+        if behavior == "replace":
+            return idxs
+        rev = self.starting_structure().base_id_reverse_map
+        current = np.array([rev[uid] for uid in self.__slice_bases], dtype=int)
+        return np.union1d(idxs, current) if behavior == "union" else np.intersect1d(idxs, current)
 
     def set_slice_plane(self, points: np.ndarray, norm: np.ndarray, behavior="replace"):
         """
@@ -122,17 +125,11 @@ class StructureSlicer(BuildSimulation):
         reference_side = np.dot(norm - points[0], normal_vec)
 
         # Select bases on the same side as the reference point
-        relative_positions = base_positions - points[0][:, np.newaxis]
-        dot_products = np.dot(normal_vec, relative_positions)
+        dot_products = (base_positions - points[0]) @ normal_vec
         select = dot_products > 0 if reference_side > 0 else dot_products < 0
         idxs = np.nonzero(select)[0]
 
-        if behavior == "union":
-            idxs = np.union1d(idxs, self.__slice_bases)
-        elif behavior == "intersection":
-            idxs = np.intersect1d(idxs, self.__slice_bases)
-
-        self.set_slice(idxs)
+        self.set_slice(self._combine(idxs, behavior))
 
     def set_slice(self, bases: Iterable[int]):
         """
@@ -140,25 +137,24 @@ class StructureSlicer(BuildSimulation):
         Parameters:
             bases: oxview indexes of bases to keep when slicing the structure
         """
-        bases = list(bases)
+        bases = sorted(set(int(b) for b in bases))
         bases_set = set(bases)  # oxview-index membership check; __slice_bases holds UIDs, not indices
+        struct = self.starting_structure()
         self.__endpoint_base_uids = []
-        self.__slice_bases = [self.starting_structure().base_id_map[base].uid for base in bases]
-        # uids of set_slice points
+        self.slice_pts = []
+        self.__slice_bases = [struct.base_id_map[base].uid for base in bases]
         # nicking strands will mess with the indexes so we need to convert oxview base indexes
-        # to uids immediately
-        # set of all nicks that need to be in the 5' -> 3' direction
-        # (recall that oxDNA does things 3'->5' because Mistakes Were Made)
-        # iter bases to remove
-        for (idx, uid) in zip(bases, self.__slice_bases):
-            if idx + 1 not in bases_set and idx + 1 < self.starting_structure().nbases:
-                if self.starting_structure().base_to_strand(idx) == self.starting_structure().base_to_strand(idx + 1):
-                    self.slice_pts.append((uid, self.starting_structure().base_id_map[idx+1].uid))
-                    self.__endpoint_base_uids.append(uid)
-            elif idx - 1 not in bases_set and idx > 0:
-                if self.starting_structure().base_to_strand(idx) == self.starting_structure().base_to_strand(idx - 1):
-                    self.slice_pts.append((uid, self.starting_structure().base_id_map[idx-1].uid))
-                    self.__endpoint_base_uids.append(uid)
+        # to uids immediately. A kept base is an endpoint if a neighbour on the same strand is discarded.
+        for idx, uid in zip(bases, self.__slice_bases):
+            is_endpoint = False
+            for nb in (idx + 1, idx - 1):
+                if nb in bases_set or not 0 <= nb < struct.nbases:
+                    continue
+                if struct.base_to_strand(idx) == struct.base_to_strand(nb):
+                    self.slice_pts.append((uid, struct.base_id_map[nb].uid))
+                    is_endpoint = True
+            if is_endpoint:
+                self.__endpoint_base_uids.append(uid)
 
     def slice_bases(self):
         return self.__slice_bases
@@ -217,12 +213,16 @@ class StructureSlicer(BuildSimulation):
 
     def add_endpoint_forces(self, force_stiffness: float = 1):
         """
-        add forced based on a md simulation of the entire structure
+        add forces based on a md simulation of the entire structure: each endpoint is trapped at
+        its current position with a stiffness inversely proportional to its RMSF in the full simulation
         """
-        for base, mean_position, rmsf in zip(self.endpoint_bases(),
-                                             self.__endpts_mean,
-                                             self.__endpts_rmsfs):
+        if self.__endpts_rmsfs is None:
+            raise RuntimeError("No sampling data; call load_sampling_from first (or use add_endpoint_forces_simple)")
+        clipped = self.clipped_structure()
+        for uid, rmsf in zip(self.endpoint_bases(), np.ravel(self.__endpts_rmsfs)):
+            base = clipped.get_base_by_uid(uid)
             self.sim.add_force(Force(force_type="trap",
-                                 particle=self.clipped_structure().base_index(base),
-                                        pos0=self.clipped_structure().get_base_by_uid(base_uid=base).pos,
-                                         stiff=force_stiffness/rmsf))
+                                     particle=clipped.base_index(base),
+                                     pos0=base.pos,
+                                     stiff=force_stiffness / max(float(rmsf), 1e-3)))
+        return self.sim
