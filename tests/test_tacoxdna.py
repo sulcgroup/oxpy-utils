@@ -55,6 +55,7 @@ def pdb_3gbi() -> Path:
     """Download 3GBI from RCSB once per session and cache it locally."""
     if not PDB_3GBI.exists():
         from Bio.PDB import PDBList
+        import shutil
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             PDBList().retrieve_pdb_file('3GBI', file_format='pdb', pdir=tmpdir, overwrite=True)
@@ -62,7 +63,7 @@ def pdb_3gbi() -> Path:
             if not ent_files:
                 pytest.skip('Could not download 3GBI from RCSB')
             PDB_3GBI.parent.mkdir(parents=True, exist_ok=True)
-            ent_files[0].rename(PDB_3GBI)
+            shutil.move(ent_files[0], PDB_3GBI)
     return PDB_3GBI
 
 
