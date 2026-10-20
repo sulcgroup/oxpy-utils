@@ -311,9 +311,12 @@ class Simulation(SimDirInfo):
             if clean_build == 'force':
                 # if we're not working with seperate file and sim dirs:
                 if self.file_dir == self.sim_dir:
+                    # the files may have been written since sim_files was last parsed
+                    self.sim_files.parse_current_files()
+                    keep = {getattr(self.sim_files, attr, None) for attr in ("dat", "top")}
                     for file in self.sim_dir.iterdir():
                         # skip removing .top and init.dat files
-                        if file != self.sim_files.dat and file != self.sim_files.top:
+                        if file not in keep:
                             file.unlink()
 
                 else:
