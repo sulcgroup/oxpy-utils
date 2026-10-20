@@ -69,8 +69,13 @@ original cube test):
 - The builder refuses a control whose frame steps do not line up with the sliced run's.
 - Trap centers are the starting snapshot, not the mean position.
 
+## Related skills
+
+`dna-structure` covers the `StructureSlicer` API itself (selection methods, `do_slice`, force modes);
+`oxdna-simulation-base` and `sim-chaining` cover the `Simulation` and relax->production plumbing the recipe above uses.
+
 ## Requires
 
-The `equipartition` mode and whole-structure alignment in `StructureSlicer` (branch
-`fix/structure-slicer-endpoint-forces` of oxpy-utils, or main once merged). Python deps:
+The `equipartition` mode and whole-structure alignment in `StructureSlicer`
+(`add_endpoint_forces(mode="equipartition")`, `load_sampling_from`). Python deps:
 `oxDNA_analysis_tools`, `scipy`, `numpy`.

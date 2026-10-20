@@ -97,14 +97,35 @@ Selection methods (composable via a `behavior` of `"union"`,
 4. Calls `export_top_conf` straight into the sim's directory — this is the
    `build_dat_top()` override itself.
 
-`load_sampling_from(traj_file_name="trajectory.dat")` computes per-endpoint
-mean position and RMSF from a parent trajectory (via oat's `mean`/
-`deviations`), so `add_endpoint_forces()` can scale each cut point's
-`HARMONIC_TRAP` stiffness by `1/rmsf` — a base that moved around a lot in
-the full-structure trajectory gets a looser restraint in the sliced
-sub-simulation than one that barely moved. `add_endpoint_forces_simple()`
-is the fallback that just applies one fixed stiffness everywhere, no
-trajectory required.
+`load_sampling_from(traj_file_name="trajectory.dat", align_indexes=None)`
+computes per-endpoint mean position and RMSF from a parent trajectory (via
+oat's `mean`/`deviations`), so `add_endpoint_forces()` can set each cut
+point's `HARMONIC_TRAP` stiffness from it — a base that moved around a lot
+in the full-structure trajectory gets a looser restraint in the sliced
+sub-simulation than one that barely moved. Details that matter:
+
+- oat's `mean`/`deviations` return arrays for **every** particle, not just
+  the requested `indexes`; the slicer keeps only the endpoint rows, in
+  `endpoint_bases()` order. `deviations` reports RMSF in nm.
+- Frames are aligned on the whole structure by default. Aligning on the
+  endpoints alone strips out the motion relative to the rest of the structure
+  that the absolute traps have to hold against, and gives traps far too stiff.
+- `add_endpoint_forces(force_stiffness, mode=...)`: `"rmsf"` (default,
+  legacy) is `force_stiffness / rmsf` with rmsf in nm; `"equipartition"` is
+  `force_stiffness * 3 * kT / rmsf^2` with rmsf in simulation units (kT from
+  the sliced sim's `T`), where `force_stiffness=1` means the trap fluctuates as
+  much as the endpoint did in the full structure. `endpoint_stiffnesses()`
+  returns the values without adding forces.
+- Trap centers are the starting snapshot's positions, not the sampled mean.
+- Sliced particle order is not the sorted order of the selected base
+  indices. Map sliced to source particles by position in the starting frame.
+
+`add_endpoint_forces_simple()` is the fallback that just applies one fixed
+stiffness everywhere, no trajectory required.
+
+For turning a finished sliced run into a shareable visualization, and for
+how to validate one against an unsliced control, see the
+`slice-trajectory-artifact` skill.
 
 Concrete validated use case (`tests/test_structure_slicer.py`): relax a
 full cube origami (MC then MD), run production MD to get a trajectory,

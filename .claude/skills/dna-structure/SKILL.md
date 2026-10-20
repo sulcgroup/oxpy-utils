@@ -1,6 +1,6 @@
 ---
 name: dna-structure
-description: Use when building, loading, editing, or exporting a DNAStructure/DNAStructureStrand via oxpy-utils (oxpy_utils.structure_editor.dna_structure) - constructing a duplex from scratch (construct_strands), loading from oxDNA .top/.dat, PDB, cadnano JSON, RCSB, or oxView, mutating a strand's sequence or bases (mutate_sequence, assign, nick), exporting back to .top/.dat/PDB/oxView/glTF, or extracting a sub-region with StructureSlicer. This is the shared foundation seqdesign, oxdna-simulation-base, and sim-chaining all build on - most oxpy-utils workflows touch it even when it isn't the headline task. Storage is 3'->5' throughout (opposite of how most sequences are written/read), a real source of bugs - see Gotchas. Not for the Simulation class itself (see oxdna-simulation-base) or a multi-stage relax pipeline (see sim-chaining), though both hand off to/from a DNAStructure constantly.
+description: Use when building, loading, editing, or exporting a DNAStructure/DNAStructureStrand via oxpy-utils (oxpy_utils.structure_editor.dna_structure) - constructing a duplex from scratch (construct_strands), loading from oxDNA .top/.dat, PDB, cadnano JSON, RCSB, or oxView, mutating a strand's sequence or bases (mutate_sequence, assign, nick), exporting back to .top/.dat/PDB/oxView/glTF, or extracting a sub-region with StructureSlicer (to visualize or validate a finished sliced run as an Artifact page, see slice-trajectory-artifact). This is the shared foundation seqdesign, oxdna-simulation-base, and sim-chaining all build on - most oxpy-utils workflows touch it even when it isn't the headline task. Storage is 3'->5' throughout (opposite of how most sequences are written/read), a real source of bugs - see Gotchas. Not for the Simulation class itself (see oxdna-simulation-base) or a multi-stage relax pipeline (see sim-chaining), though both hand off to/from a DNAStructure constantly.
 ---
 
 # `DNAStructure` (`oxpy_utils/structure_editor/dna_structure.py`)
@@ -115,7 +115,18 @@ slicer.load_sampling_from("trajectory.dat")  # per-endpoint mean position + RMSF
 slicer.add_endpoint_forces()                 # HARMONIC_TRAP at each cut point,
                                               # scaled by 1/rmsf so the excised
                                               # region doesn't unravel at the cuts
+slicer.add_endpoint_forces(mode="equipartition")  # stiffness 3kT/rmsf^2 instead:
+                                              # the trap's own fluctuation matches the
+                                              # endpoint's in the full structure
 ```
+
+`load_sampling_from` aligns frames on the **whole** structure by default; the
+sampling run should be long (1e6+ steps), since a short smoke-test run gives
+RMSFs that are too small and traps that are far too stiff.
+
+To visualize a finished sliced run (3D playback, aligned RMSD against an
+unsliced baseline), or for the recipe to validate one against an unsliced
+control, see the `slice-trajectory-artifact` skill.
 
 Internally, `set_slice` converts selected indices to persistent uids and
 detects **cut points** (selected bases whose strand-neighbor isn't
