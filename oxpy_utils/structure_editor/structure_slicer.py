@@ -14,6 +14,7 @@ from oxDNA_analysis_tools.mean import mean
 
 from .dna_structure import DNAStructure, strand_from_info, DNABase, load_dna_structure
 from ..utils.force import harmonic_trap, Force, ForceType
+from ..utils.util import DEGREES_K_PER_UNIT, METERS_PER_UNIT
 from ..oxdna_simulation import Simulation, BuildSimulation
 
 
@@ -49,18 +50,29 @@ class StructureSlicer(BuildSimulation):
     def clipped_structure(self) -> DNAStructure:
         return self.__clipped_structure
 
-    def load_sampling_from(self, traj_file_name="trajectory.dat"):
+    def load_sampling_from(self, traj_file_name="trajectory.dat", align_indexes: Union[None, Iterable[int]] = None):
         """
-        loads rmsfs from trajectory
+        loads endpoint mean positions and rmsfs from a trajectory of the full structure
+        Parameters:
+            traj_file_name: trajectory of the full structure (in the simulation file dir)
+            align_indexes: oxview indexes of the particles each frame is aligned on before computing
+                fluctuations. Default (None) is the whole structure, so that the rmsfs include the
+                endpoints' motion relative to the structure as a whole, which is what an absolute
+                trap on a sliced endpoint has to hold against. Aligning on the endpoints alone removes
+                that motion and gives traps that are too stiff.
         """
+        align_indexes = None if align_indexes is None else list(align_indexes)
         assert (self.file_dir / traj_file_name).is_file()
         top_info, traj_info = describe(str(self.file_dir / self.top_file_name), str(self.file_dir / traj_file_name))
         # UIDs are global counters, not 0-based particle indices; convert via base_id_reverse_map
         ep_oxview_idxs = [self.starting_structure().base_id_reverse_map[uid]
                           for uid in self.endpoint_bases()]
-        conf = mean(traj_info, top_info, indexes=ep_oxview_idxs)
-        self.__endpts_mean = conf.positions
-        _, self.__endpts_rmsfs = deviations(traj_info, top_info, conf, indexes=ep_oxview_idxs)
+        conf = mean(traj_info, top_info, indexes=align_indexes)
+        # mean() and deviations() return arrays covering every particle in the full structure;
+        # keep only the endpoint rows, in the same order as endpoint_bases()
+        self.__endpts_mean = conf.positions[ep_oxview_idxs]
+        _, rmsfs = deviations(traj_info, top_info, conf, indexes=align_indexes)
+        self.__endpts_rmsfs = rmsfs[ep_oxview_idxs]
 
     def endpoint_bases(self) -> list[int]:
         return self.__endpoint_base_uids
@@ -211,18 +223,46 @@ class StructureSlicer(BuildSimulation):
             ))
         return self.sim
 
-    def add_endpoint_forces(self, force_stiffness: float = 1):
+    def sim_kT(self) -> float:
+        """kT of the sliced simulation, in oxDNA simulation units, from its input's T"""
+        T = str(self.sim.input["T"]).strip()
+        if T[-1] in "cC":
+            return (float(T[:-1]) + 273.15) / DEGREES_K_PER_UNIT["dna"]
+        if T[-1] in "kK":
+            return float(T[:-1]) / DEGREES_K_PER_UNIT["dna"]
+        return float(T)  # already in simulation units
+
+    def endpoint_stiffnesses(self, force_stiffness: float = 1, mode: str = "rmsf") -> np.ndarray:
         """
-        add forces based on a md simulation of the entire structure: each endpoint is trapped at
-        its current position with a stiffness inversely proportional to its RMSF in the full simulation
+        trap stiffness for each endpoint, in endpoint_bases() order
+        Parameters:
+            force_stiffness: for mode "rmsf", the numerator in stiff = force_stiffness / rmsf (rmsf in nm).
+                For mode "equipartition", a unitless multiplier on the equipartition stiffness.
+            mode: "rmsf" (legacy) or "equipartition": stiff = 3 kT / rmsf^2 with rmsf in simulation
+                length units, which gives a harmonic trap whose own thermal fluctuation equals the
+                endpoint's fluctuation in the full-structure run
         """
         if self.__endpts_rmsfs is None:
             raise RuntimeError("No sampling data; call load_sampling_from first (or use add_endpoint_forces_simple)")
+        assert mode in ["rmsf", "equipartition"], f"Invalid stiffness mode {mode}"
+        rmsfs = np.maximum(np.ravel(self.__endpts_rmsfs).astype(float), 1e-3)
+        if mode == "rmsf":
+            return force_stiffness / rmsfs
+        rmsf_su = rmsfs / (METERS_PER_UNIT["dna"] * 1e9)  # deviations() reports nm
+        return force_stiffness * 3 * self.sim_kT() / rmsf_su ** 2
+
+    def add_endpoint_forces(self, force_stiffness: float = 1, mode: str = "rmsf"):
+        """
+        add forces based on a md simulation of the entire structure: each endpoint is trapped at
+        its current position with a stiffness derived from its RMSF in the full simulation
+        see endpoint_stiffnesses for force_stiffness and mode
+        """
+        stiffnesses = self.endpoint_stiffnesses(force_stiffness, mode)
         clipped = self.clipped_structure()
-        for uid, rmsf in zip(self.endpoint_bases(), np.ravel(self.__endpts_rmsfs)):
+        for uid, stiff in zip(self.endpoint_bases(), stiffnesses):
             base = clipped.get_base_by_uid(uid)
             self.sim.add_force(Force(force_type="trap",
                                      particle=clipped.base_index(base),
                                      pos0=base.pos,
-                                     stiff=force_stiffness / max(float(rmsf), 1e-3)))
+                                     stiff=float(stiff)))
         return self.sim
