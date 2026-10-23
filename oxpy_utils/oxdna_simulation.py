@@ -1304,15 +1304,24 @@ class SigTermException(Exception):
 
 class SimulationManager:
     """
-    todo: explaination
+    Runs a queue of oxDNA simulations as concurrent worker processes, spreading them across
+    the available GPUs. In conjunction with nvidia-cuda-mps-control (see
+    start_nvidia_cuda_mps_control()), many small simulations can share each GPU.
+
+    Typical use::
+
+        mgr = SimulationManager(max_sims_per_gpu=8)
+        for sim in sims:
+            mgr.queue_sim(sim)
+        failures = mgr.worker_manager(run_when_failed=True)
+        mgr.shutdown()
     """
     manager: mp.Manager
     # todo: replace w/ generator?
     sim_queue: queue.Queue[Simulation]
-    process_queue: queue.Queue
     gpu_memory_queue: queue.Queue
+    # workers report simulation errors here; worker_manager() drains it
     terminate_queue: queue.Queue
-    worker_process_list: list[mp.Process]
 
     warnings.filterwarnings(
         "ignore",
@@ -1320,18 +1329,26 @@ class SimulationManager:
         RuntimeWarning
     )
 
-    """ In conjunction with nvidia-cuda-mps-control, allocate simulations to avalible cpus and gpus."""
+    # NVIDIA MPS accepts a limited number of simultaneous client contexts per GPU
+    # (48 on Volta and newer, 16 before that). Past that limit new CUDA contexts fail to
+    # connect, so this is the default per-GPU cap whenever an MPS daemon is in use.
+    MPS_MAX_CLIENTS_PER_GPU = 48
 
-    def __init__(self, n_processes=None, sleep_time=5.0):
+    def __init__(self, n_processes=None, sleep_time=5.0, max_sims_per_gpu=None):
         """
         Initalize the multiprocessing queues used to manage simulation allocation.
-        
-        The sim_queue utilizes a single process to store all queued simulations and allocates simulations to cpus.
-        The process_queue manages the number of processes/cpus avalible to be sent to gpu memory.
-        gpu_memory_queue is used to block the process_queue from sending simulations to gpu memory if memoy is near full.
-        
+
+        The sim_queue stores all queued simulations. worker_manager() launches each one in
+        its own process, never running more than n_processes at once (and never more than
+        max_sims_per_gpu on any single GPU).
+
         Parameters:
             n_processes (int): number of processes/cpus avalible to run oxDNA simulations in parallel.
+            sleep_time (float): seconds to wait between launching consecutive GPU simulations,
+                so their CUDA contexts aren't all created at the same instant.
+            max_sims_per_gpu (int): most simulations to run concurrently on one GPU. None means
+                MPS_MAX_CLIENTS_PER_GPU while an MPS daemon is in use, otherwise no limit
+                beyond n_processes.
         """
         if n_processes is None:
             self.n_processes = self.get_number_of_processes()
@@ -1339,24 +1356,50 @@ class SimulationManager:
             if type(n_processes) is not int:
                 raise ValueError('n_processes must be an integer')
             self.n_processes = n_processes
+        if max_sims_per_gpu is not None and (type(max_sims_per_gpu) is not int or max_sims_per_gpu < 1):
+            raise ValueError('max_sims_per_gpu must be a positive integer')
+        self.max_sims_per_gpu = max_sims_per_gpu
         self.manager = mp.Manager()
         self.sim_queue = self.manager.Queue()
-        self.process_queue = self.manager.Queue(self.n_processes)
         self.gpu_memory_queue = self.manager.Queue(1)
-        self.terminate_queue = self.manager.Queue(1)
-        self.worker_process_list = []
+        self.terminate_queue = self.manager.Queue()
+        # worker processes currently running, mapped to (sim_dir, gpu ordinal or None)
+        self._running: dict[mp.Process, tuple[str, Optional[int]]] = {}
         self.sleep_time = sleep_time
+        # error messages of simulations that failed during the most recent worker_manager() call
+        self.failures: list[str] = []
         # set by start_nvidia_cuda_mps_control() while a batch is running; None means
         # this instance either hasn't started an MPS daemon yet or has stopped its own
         self.mps_pipe_directory = None
         self.mps_log_directory = None
-
-        signal.signal(signal.SIGTERM, self._sigterm_handler)
-
+        # True if the MPS daemon in use was already running (set up outside this instance)
+        # and so must be left running by stop_nvidia_cuda_mps_control()
+        self._mps_external = False
+        # CUDA_MPS_* values in os.environ before start_nvidia_cuda_mps_control(), to restore afterwards
+        self._mps_prev_env: dict[str, Optional[str]] = {}
 
     def _sigterm_handler(self, signum, frame):
         raise SigTermException("SIGTERM received")
 
+    def _install_sigterm_handler(self):
+        """
+        Make SIGTERM (e.g. slurm's scancel) raise SigTermException in worker_manager() so it
+        can clean up its workers and MPS daemon. Python only allows installing signal handlers
+        from the main thread; elsewhere this is skipped, and the previous handler is returned
+        for _restore_sigterm_handler().
+        """
+        try:
+            return signal.signal(signal.SIGTERM, self._sigterm_handler)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _restore_sigterm_handler(previous):
+        if previous is not None:
+            try:
+                signal.signal(signal.SIGTERM, previous)
+            except ValueError:
+                pass
 
     def get_number_of_processes(self):
         try:
@@ -1371,24 +1414,76 @@ class SimulationManager:
             print(f"Failed to determine the number of CPUs: {e}")
             return 1  # Safe fallback if number of CPUs can't be determined
 
+    def visible_gpus(self) -> list[tuple[int, int]]:
+        """
+        The GPUs a worker process launched from here can use.
+
+        oxDNA's `CUDA_device` input is an ordinal within the CUDA_VISIBLE_DEVICES list (when
+        that is set), whereas NVML always indexes the node's physical GPUs. On a shared node
+        where slurm hands out e.g. CUDA_VISIBLE_DEVICES=2,3, the usable ordinals are 0 and 1
+        but their NVML indices are 2 and 3 - passing an NVML index as `CUDA_device` would pick
+        the wrong GPU or an invalid one.
+
+        :return: list of (cuda_ordinal, nvml_index), one per usable GPU
+        """
+        n_physical = self.get_num_gpus()
+        visible = os.environ.get('CUDA_VISIBLE_DEVICES')
+        if visible is None:
+            return [(i, i) for i in range(n_physical)]
+        gpus = []
+        for ordinal, entry in enumerate(e.strip() for e in visible.split(',') if e.strip()):
+            if entry.lstrip('-').isdigit():
+                nvml_idx = int(entry)
+                if not 0 <= nvml_idx < n_physical:
+                    break  # CUDA stops enumerating at the first invalid entry
+            else:
+                # a (possibly abbreviated) UUID, e.g. GPU-2ec14838
+                nvml_idx = next((i for i in range(n_physical)
+                                 if self._gpu_uuid(i).startswith(entry)), None)
+                if nvml_idx is None:
+                    break
+            gpus.append((ordinal, nvml_idx))
+        if not gpus:
+            raise RuntimeError(f"CUDA_VISIBLE_DEVICES={visible!r} leaves no usable GPUs")
+        return gpus
+
+    @staticmethod
+    def _gpu_uuid(nvml_idx: int) -> str:
+        uuid_ = nvidia_smi.nvmlDeviceGetUUID(nvidia_smi.nvmlDeviceGetHandleByIndex(nvml_idx))
+        return uuid_.decode() if isinstance(uuid_, bytes) else uuid_
+
+    def _free_memory_mb(self, nvml_idx: int) -> float:
+        info = nvidia_smi.nvmlDeviceGetMemoryInfo(nvidia_smi.nvmlDeviceGetHandleByIndex(nvml_idx))
+        return bytes_to_megabytes(info.total) - bytes_to_megabytes(info.used)
+
     def gpu_resources(self) -> tuple[float, int]:
         """
         Method to probe the number and current available memory of gpus.
         :return: tuple where the first element is the amount of free memory on the
-         GPU with the most free memory, and the second element is the index of that GPU
+         GPU with the most free memory, and the second element is the CUDA ordinal (the value to
+         use for `CUDA_device`) of that GPU
         """
-        avalible_memory = []
-        num_gpus = self.get_num_gpus()
-        # loop available gpus
-        for i in range(num_gpus):
-            # no idea how this code works
-            handle = nvidia_smi.nvmlDeviceGetHandleByIndex(i)
-            info = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
-            avalible_memory.append(bytes_to_megabytes(info.total) - bytes_to_megabytes(info.used))
-        # find gpu with most memory
-        gpu_most_aval_mem_free = max(avalible_memory)
-        gpu_most_aval_mem_free_idx = avalible_memory.index(gpu_most_aval_mem_free)
-        return float(np.round(gpu_most_aval_mem_free, 2)), gpu_most_aval_mem_free_idx
+        free = {ordinal: self._free_memory_mb(nvml_idx) for ordinal, nvml_idx in self.visible_gpus()}
+        most_free = max(free, key=free.get)
+        return float(np.round(free[most_free], 2)), most_free
+
+    def _pick_gpu(self, sims_per_gpu: dict[int, int], cap: Optional[int]) -> Optional[int]:
+        """
+        Choose the GPU for the next simulation: the one currently running the fewest of this
+        manager's simulations, with free memory only breaking ties. (Choosing by free memory
+        alone is unreliable: a freshly launched worker hasn't allocated anything yet, so a
+        burst of launches all see the same GPU as emptiest.)
+
+        :param sims_per_gpu: running simulation count, by CUDA ordinal
+        :param cap: most simulations allowed on one GPU, or None for no limit
+        :return: CUDA ordinal, or None if every GPU is already at `cap`
+        """
+        candidates = []
+        for ordinal, nvml_idx in self.visible_gpus():
+            n = sims_per_gpu.get(ordinal, 0)
+            if cap is None or n < cap:
+                candidates.append((n, -self._free_memory_mb(nvml_idx), ordinal))
+        return min(candidates)[2] if candidates else None
 
     def get_num_gpus(self):
         """
@@ -1445,110 +1540,132 @@ class SimulationManager:
         self.sim_queue.put(sim)
 
     def worker_manager(self, gpu_mem_block=False, custom_observables=None, run_when_failed=False, cpu_run=False,
-                       use_mps=True):
+                       use_mps=True) -> list[str]:
         """
-        Head process in charge of allocating queued simulations to processes and gpu memory.
+        Head process in charge of allocating queued simulations to processes and gpus. Blocks
+        until every queued simulation has finished.
+
+        At most n_processes simulations run at once, and (unless cpu_run) at most max_sims_per_gpu
+        on any one GPU, each GPU taking the next simulation when it has the fewest running. A
+        worker that dies without reporting (killed, segfault, CUDA failure...) is counted as a
+        failed simulation, so one bad worker can't stall the rest of the batch.
 
         :param use_mps: if True (default) and cpu_run is False, start a dedicated
         nvidia-cuda-mps-control daemon for the duration of this batch so concurrent GPU
         worker processes share contexts via MPS. Ignored for cpu_run. Pass False to manage
         MPS yourself (or run without it) instead of having this call start/stop a daemon.
+        :param run_when_failed: if False (default), the first failed simulation terminates all
+        running workers and exits (see handle_death()). If True, the remaining simulations still run.
+        :return: error messages of the simulations that failed (always empty unless run_when_failed)
         """
         tic = timeit.default_timer()
         if cpu_run is True:
             gpu_mem_block = False
         self.custom_observables = custom_observables
+        self.failures = []
+        previous_sigterm_handler = self._install_sigterm_handler()
+        mps_active = False
         if not cpu_run and use_mps:
-            self.start_nvidia_cuda_mps_control()
-        # as long as there are simulations in the queue
+            mps_active = self.start_nvidia_cuda_mps_control()
+        gpu_cap = self.max_sims_per_gpu
+        if gpu_cap is None and mps_active:
+            gpu_cap = self.MPS_MAX_CLIENTS_PER_GPU
         try:
-            # or any(p.is_alive() for p in self.worker_process_list): # Keep running if sims queued OR workers active
-            while not self.sim_queue.empty():
-                # --- Check for simulation errors ---
-                if not self.terminate_queue.empty():
-                    if run_when_failed is False:
-                        simulation_error_message = self.terminate_queue.get()
-                        self.handle_death(exception=oxpy.OxDNAError, message=simulation_error_message)
-                        # handle_death should exit or raise, otherwise this loop continues
-                        break # Exit loop after handling death if handle_death returns
+            # until every simulation has been launched *and* every worker has finished
+            while not self.sim_queue.empty() or self._running:
+                self._reap_workers()
+                if self.failures and not run_when_failed:
+                    self.handle_death(exception=oxpy.OxDNAError, message=self.failures[0])
+                    # handle_death exits, but just in case:
+                    break
 
-                # --- Try to launch a new worker if queue has sims AND we have capacity ---
-                # todo: isn't this if-statement redundant because of the outer while-loop?
-                if not self.sim_queue.empty():
-
-                    # --- If process_queue if full block, otherwise start a new process ---
-                    self.process_queue.put('Simulation worker started')
-                    sleep(0.1)
-
-                    sim = self.sim_queue.get()
-                    gpu_idx = -1 # Default for CPU run or if GPU query fails
-                    free_gpu_memory = 0.0 # in Mystery Units
-
-                    # --- Find the GPU with the most free memory ---
+                launched = False
+                if not self.sim_queue.empty() and len(self._running) < self.n_processes:
+                    gpu_idx = None
                     if not cpu_run:
-                        # Clear CUDA_device from input so SimulationManager can re-assign it
-                        if 'CUDA_device' in sim.input.input_dict:
-                            del sim.input.input_dict['CUDA_device']
-
-                        free_gpu_memory, gpu_idx = self.gpu_resources()
-                        if gpu_idx == -1:
-                             print("Warning: Could not get GPU resources, check nvidia-smi. Running on CPU instead?")
-                        else:
+                        sims_per_gpu = {}
+                        for _, running_gpu in self._running.values():
+                            sims_per_gpu[running_gpu] = sims_per_gpu.get(running_gpu, 0) + 1
+                        gpu_idx = self._pick_gpu(sims_per_gpu, gpu_cap)
+                    # gpu_idx is None for a cpu_run, or when every GPU is at its cap (wait)
+                    if cpu_run or gpu_idx is not None:
+                        sim = self.sim_queue.get()
+                        if gpu_idx is not None:
+                            # Clear CUDA_device from input so SimulationManager can re-assign it
+                            sim.input.input_dict.pop('CUDA_device', None)
                             sim.input_file({'CUDA_device': str(gpu_idx)})
 
+                        # --- GPU Memory Blocking Logic ---
+                        if gpu_mem_block and not cpu_run:
+                            free_gpu_memory, _ = self.gpu_resources()
+                            # Estimate memory needed *before* starting process
+                            sim_mem = self.get_sim_mem(sim, gpu_idx)
+                            if free_gpu_memory < (2 * sim_mem): # Check before potentially blocking
+                                print(f"Waiting for GPU memory. Need ~{2*sim_mem:.2f} MB, have {free_gpu_memory:.2f} MB.")
+                                wait_for_gpu_memory = True
+                                while wait_for_gpu_memory:
+                                    #holding on with the change for testing
+                                    wait_for_gpu_memory = False
+                                print('gpu memory freed')
 
-                    # --- GPU Memory Blocking Logic ---
-                    if gpu_mem_block and not cpu_run and gpu_idx != -1:
-                        # Estimate memory needed *before* starting process
-                        sim_mem = self.get_sim_mem(sim, gpu_idx)
-                        if free_gpu_memory < (2 * sim_mem): # Check before potentially blocking
-                            print(f"Waiting for GPU memory. Need ~{2*sim_mem:.2f} MB, have {free_gpu_memory:.2f} MB.")
-                            wait_for_gpu_memory = True
-                            while wait_for_gpu_memory:
-                                #holding on with the change for testing
-                                wait_for_gpu_memory = False
-                            print('gpu memory freed')
+                        p = mp.Process(target=self.worker_job, args=(sim, gpu_idx,),
+                                       kwargs={'gpu_mem_block': gpu_mem_block})
+                        p.start()
+                        self._running[p] = (str(sim.sim_dir), gpu_idx)
+                        launched = True
 
-                    # --- Start the worker process ---
-                    p = mp.Process(target=self.worker_job, args=(sim, gpu_idx,), kwargs={'gpu_mem_block': gpu_mem_block})
-                    p.start()
-                    self.worker_process_list.append(p)
-                    
-                
-                if not cpu_run: # Only sleep if not CPU and not already blocked by memory check
+                if launched and not cpu_run:
+                    # stagger CUDA context creation
                     sleep(self.sleep_time)
-                elif cpu_run:
-                    sleep(0.1) # Shorter sleep for CPU runs
-            
-            while not self.process_queue.empty():
-                sleep(10)
-           
-        except KeyboardInterrupt:                        
+                else:
+                    sleep(0.1 if cpu_run else min(self.sleep_time, 1.0))
+
+        except KeyboardInterrupt:
             KeyboardInterruptmessage = 'KeyboardInterrupt caught, terminating all processes'
             self.handle_death(exception=KeyboardInterrupt, message=KeyboardInterruptmessage)
-            
+
         except SigTermException:
             sigTermMessage = 'SIGTERM (signal 15) recived.'
             self.handle_death(exception=SigTermException, message=sigTermMessage)
-        
+
         except Exception as e:
             unexpected_message = 'Exception encountered in worker manager, terminating all processes'
             self.handle_death(exception=e, message=unexpected_message)
-            
+
         finally: # Ensure cleanup runs even if errors occur
-            print("Waiting for any remaining worker processes to finish...")
-            for p in self.worker_process_list:
+            for p in list(self._running):
                 p.join(timeout=10) # Wait for clean exit with timeout
                 if p.is_alive():
                     print(f"Process {p.pid} did not exit cleanly, terminating forcefully.")
                     p.terminate() # Force terminate if join timed out
-            self.worker_process_list[:] = [] # Clear the list of processes
-            if not cpu_run and use_mps:
+            self._running.clear()
+            if mps_active:
                 self.stop_nvidia_cuda_mps_control()
+            self._restore_sigterm_handler(previous_sigterm_handler)
 
         toc = timeit.default_timer()
+        if self.failures:
+            print(f'{len(self.failures)} simulation(s) failed:')
+            for failure in self.failures:
+                print(failure)
         print(f'All queued simulations finished in: {toc - tic}')
+        return list(self.failures)
 
+    def _reap_workers(self):
+        """
+        Forget workers that have exited, and collect failures: error messages the workers
+        reported through terminate_queue, plus any worker that exited abnormally without
+        reporting one (killed, segfault, an exception escaping worker_job()).
+        """
+        for p in [p for p in self._running if not p.is_alive()]:
+            p.join()
+            sim_dir, _ = self._running.pop(p)
+            if p.exitcode != 0:
+                how = (f"signal {signal.Signals(-p.exitcode).name}" if p.exitcode < 0
+                       else f"exit code {p.exitcode}")
+                self.failures.append(f'Simulation worker for {sim_dir} died unexpectedly ({how})')
+        while not self.terminate_queue.empty():
+            self.failures.append(self.terminate_queue.get())
 
     def handle_death(self, exception=Exception, message=None):
         """Terminates all tracked worker processes."""
@@ -1556,43 +1673,36 @@ class SimulationManager:
             print(message)
         
         # Print traceback if it's not a KeyboardInterrupt (which doesn't usually need a traceback)
-        if not isinstance(exception, KeyboardInterrupt):
+        if exception is not KeyboardInterrupt and not isinstance(exception, KeyboardInterrupt):
             print("Traceback (most recent call last):")
             traceback.print_exc() # Print the traceback for the exception that triggered handle_death
 
-        print(f"Terminating {len(self.worker_process_list)} worker process(es)...")
-        terminated_count = 0
-        # --- CHANGE 3: Iterate through Process objects and use terminate() ---
-        for worker_process in self.worker_process_list:
+        workers = list(self._running)
+        print(f"Terminating {len(workers)} worker process(es)...")
+        for worker_process in workers:
             try:
                 if worker_process.is_alive():
-                    # print(f"Sending terminate signal to process PID: {worker_process.pid}")
                     worker_process.terminate()
-                    terminated_count += 1
             except Exception as e:
                 # Catch potential errors during termination (e.g., process already dead)
                 print(f"Error trying to terminate process PID {getattr(worker_process, 'pid', 'N/A')}: {e}")
                 pass # Continue trying to terminate others
-            
+
         # Check again and potentially join/kill remaining ones (more robust cleanup)
-        remaining_processes = []
-        for worker_process in self.worker_process_list:
-             if worker_process.is_alive():
-                 print(f"Process PID {worker_process.pid} still alive after terminate signal. Attempting join...")
-                 worker_process.join(timeout=2) # Short timeout join
-                 if worker_process.is_alive():
-                      print(f"Process PID {worker_process.pid} did not join. Killing...")
-                      # process.kill() sends SIGKILL, more forceful than terminate (SIGTERM)
-                      try:
-                           worker_process.kill() 
-                      except Exception as kill_e:
-                           print(f"Error killing process PID {worker_process.pid}: {kill_e}")
-                 else:
-                      print(f"Process PID {worker_process.pid} joined successfully.")
-             remaining_processes.append(worker_process) # Keep track even if terminated/killed now
-             
-        # Update the list to reflect only processes that might still be tracked (even if dead)
-        self.worker_process_list = remaining_processes
+        for worker_process in workers:
+            if worker_process.is_alive():
+                print(f"Process PID {worker_process.pid} still alive after terminate signal. Attempting join...")
+                worker_process.join(timeout=2) # Short timeout join
+                if worker_process.is_alive():
+                    print(f"Process PID {worker_process.pid} did not join. Killing...")
+                    # process.kill() sends SIGKILL, more forceful than terminate (SIGTERM)
+                    try:
+                        worker_process.kill()
+                    except Exception as kill_e:
+                        print(f"Error killing process PID {worker_process.pid}: {kill_e}")
+                else:
+                    print(f"Process PID {worker_process.pid} joined successfully.")
+        self._running.clear()
 
         # Shutdown manager after attempting process cleanup
         print("Shutting down manager in handle_death...")
@@ -1601,12 +1711,12 @@ class SimulationManager:
         print("Exiting due to error condition.")
         sys.exit(1) # Exit the script after handling death
 
-    def worker_job(self, sim: Simulation, gpu_idx: int, gpu_mem_block: bool = False):
+    def worker_job(self, sim: Simulation, gpu_idx: Optional[int], gpu_mem_block: bool = False):
         """ Run an allocated oxDNA simulation"""
-        if gpu_mem_block is True:
-            sim_mem = self.get_sim_mem(sim, gpu_idx)
-            self.gpu_memory_queue.put(sim_mem)
-
+        # worker_manager() installed a SIGTERM handler that raises an exception, which this
+        # worker inherited. Python only runs handlers between bytecodes, so while oxDNA is busy
+        # in C++ it would never fire and terminate() would have no effect: restore the default.
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
         try:
             sim.oxpy_run.run(subprocess=False, custom_observables=self.custom_observables)
         except oxpy.OxDNAError:
@@ -1617,14 +1727,21 @@ class SimulationManager:
         if sim.oxpy_run.error_message is not None:
             self.terminate_queue.put(
                 f'Simulation exception encountered in {sim.sim_dir}:\n{sim.oxpy_run.error_message}')
-        sleep(1)
-        self.process_queue.get()
+
+    def shutdown(self):
+        """
+        Release this manager's resources: stops its MPS daemon (if one is somehow still running)
+        and the multiprocessing.Manager server process. The manager can't be used afterwards.
+        """
+        self.stop_nvidia_cuda_mps_control()
+        self.manager.shutdown()
 
     def run(self, join=False,
             gpu_mem_block=False,
             custom_observables=None,
             run_when_failed=False,
-            cpu_run=False):
+            cpu_run=False,
+            use_mps=True):
         """
         Run the worker manager in a subprocess
         todo: ...logging?
@@ -1637,7 +1754,8 @@ class SimulationManager:
                        kwargs={'gpu_mem_block': gpu_mem_block,
                                'custom_observables': custom_observables,
                                'run_when_failed': run_when_failed,
-                               'cpu_run': cpu_run
+                               'cpu_run': cpu_run,
+                               'use_mps': use_mps
                                })
         self.manager_process = p
         p.start()
@@ -1656,6 +1774,29 @@ class SimulationManager:
     #             pass
     #     self.worker_process_list[:] = []
 
+    @staticmethod
+    def _mps_control(command: Optional[str], pipe_dir: str, log_dir: str, **run_kwargs) -> sp.CompletedProcess:
+        """
+        Run nvidia-cuda-mps-control against the daemon (or, with no command, a new daemon) using
+        the given pipe and log directories. `command` is a line for the control daemon's
+        interactive prompt, e.g. 'quit'; None starts a daemon (`-d`).
+        """
+        env = os.environ.copy()
+        env['CUDA_MPS_PIPE_DIRECTORY'] = pipe_dir
+        env['CUDA_MPS_LOG_DIRECTORY'] = log_dir
+        if command is None:
+            return sp.run(['nvidia-cuda-mps-control', '-d'], env=env, capture_output=True, text=True, **run_kwargs)
+        return sp.run(['nvidia-cuda-mps-control'], input=command + '\n', env=env, capture_output=True, text=True,
+                      **run_kwargs)
+
+    def _mps_daemon_responds(self, pipe_dir: str, log_dir: str) -> bool:
+        """whether an MPS control daemon is answering on the given pipe directory"""
+        try:
+            result = self._mps_control('get_default_active_thread_percentage', pipe_dir, log_dir, timeout=10)
+        except (sp.SubprocessError, OSError):
+            return False
+        return result.returncode == 0
+
     def start_nvidia_cuda_mps_control(self) -> bool:
         """
         Start a dedicated nvidia-cuda-mps-control daemon for this manager's batch of
@@ -1666,8 +1807,12 @@ class SimulationManager:
         no-op. The pipe/log directories are unique per call (pid + uuid) so multiple
         SimulationManagers - or repeated batches - never collide with each other's daemons.
 
+        If CUDA_MPS_PIPE_DIRECTORY already points at a daemon that answers (e.g. one started by
+        the job script, as in the README), that daemon is used as-is and left running by
+        stop_nvidia_cuda_mps_control().
+
         :return: True if MPS is active (started here, or already owned by this instance),
-                 False if nvidia-cuda-mps-control isn't available - callers should fall back
+                 False if MPS couldn't be set up - callers should fall back
                  to plain concurrent execution (worker processes still run, just without MPS).
         """
         if self.mps_pipe_directory is not None:
@@ -1679,50 +1824,76 @@ class SimulationManager:
                            "of sharing contexts via MPS).")
             return False
 
+        # a daemon someone else already set up for this environment?
+        existing_pipe_dir = os.environ.get('CUDA_MPS_PIPE_DIRECTORY')
+        if existing_pipe_dir:
+            existing_log_dir = os.environ.get('CUDA_MPS_LOG_DIRECTORY', existing_pipe_dir)
+            if self._mps_daemon_responds(existing_pipe_dir, existing_log_dir):
+                self.mps_pipe_directory = existing_pipe_dir
+                self.mps_log_directory = existing_log_dir
+                self._mps_external = True
+                return True
+
         tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
         pipe_dir = f"/tmp/mps-pipe_{tag}"
         log_dir = f"/tmp/mps-log_{tag}"
         os.makedirs(pipe_dir, exist_ok=True)
         os.makedirs(log_dir, exist_ok=True)
 
-        env = os.environ.copy()
-        env['CUDA_MPS_PIPE_DIRECTORY'] = pipe_dir
-        env['CUDA_MPS_LOG_DIRECTORY'] = log_dir
         try:
-            sp.run(['nvidia-cuda-mps-control', '-d'], env=env, check=True,
-                   capture_output=True, text=True)
+            self._mps_control(None, pipe_dir, log_dir, check=True)
         except (sp.CalledProcessError, OSError) as e:
             warnings.warn(f"Failed to start nvidia-cuda-mps-control: {e}; continuing without CUDA MPS.")
+            shutil.rmtree(pipe_dir, ignore_errors=True)
+            return False
+        # `-d` returns as soon as the daemon forks: make sure it's actually answering, since
+        # workers launched against a dead daemon fail on their first CUDA call
+        if not self._mps_daemon_responds(pipe_dir, log_dir):
+            warnings.warn(f"nvidia-cuda-mps-control started but isn't responding (see {log_dir}); "
+                          f"continuing without CUDA MPS.")
+            self._stop_mps_daemon(pipe_dir, log_dir)
+            shutil.rmtree(pipe_dir, ignore_errors=True)
             return False
 
         # propagate to this process's environment so mp.Process workers forked below
         # (worker_job()) inherit it and route their CUDA contexts through this daemon
+        self._mps_prev_env = {key: os.environ.get(key)
+                              for key in ('CUDA_MPS_PIPE_DIRECTORY', 'CUDA_MPS_LOG_DIRECTORY')}
         os.environ['CUDA_MPS_PIPE_DIRECTORY'] = pipe_dir
         os.environ['CUDA_MPS_LOG_DIRECTORY'] = log_dir
         self.mps_pipe_directory = pipe_dir
         self.mps_log_directory = log_dir
+        self._mps_external = False
+        print(f"CUDA MPS daemon started (logs: {log_dir})")
         return True
+
+    def _stop_mps_daemon(self, pipe_dir: str, log_dir: str):
+        try:
+            self._mps_control('quit', pipe_dir, log_dir, timeout=10)
+        except (sp.SubprocessError, OSError) as e:
+            warnings.warn(f"Failed to cleanly stop nvidia-cuda-mps-control: {e}")
 
     def stop_nvidia_cuda_mps_control(self):
         """
         Stop the MPS daemon started by start_nvidia_cuda_mps_control(), if this instance
-        started one. Safe to call unconditionally (e.g. from a finally block).
+        started one (a daemon that was already running is left alone), and restore the
+        CUDA_MPS_* environment variables to what they were. The daemon's logs are kept;
+        its pipe directory is removed. Safe to call unconditionally (e.g. from a finally block).
         """
         if self.mps_pipe_directory is None:
             return
-        env = os.environ.copy()
-        env['CUDA_MPS_PIPE_DIRECTORY'] = self.mps_pipe_directory
-        env['CUDA_MPS_LOG_DIRECTORY'] = self.mps_log_directory
-        try:
-            sp.run(['nvidia-cuda-mps-control'], input='quit\n', env=env,
-                   text=True, capture_output=True, timeout=10)
-        except (sp.SubprocessError, OSError) as e:
-            warnings.warn(f"Failed to cleanly stop nvidia-cuda-mps-control: {e}")
-        finally:
-            os.environ.pop('CUDA_MPS_PIPE_DIRECTORY', None)
-            os.environ.pop('CUDA_MPS_LOG_DIRECTORY', None)
-            self.mps_pipe_directory = None
-            self.mps_log_directory = None
+        if not self._mps_external:
+            self._stop_mps_daemon(self.mps_pipe_directory, self.mps_log_directory)
+            shutil.rmtree(self.mps_pipe_directory, ignore_errors=True)
+            for key, previous in self._mps_prev_env.items():
+                if previous is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = previous
+        self._mps_prev_env = {}
+        self._mps_external = False
+        self.mps_pipe_directory = None
+        self.mps_log_directory = None
 
     def test_cuda_script(self):
         script = """#include <stdio.h>

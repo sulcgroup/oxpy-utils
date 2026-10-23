@@ -31,6 +31,34 @@ mkdir -p $CUDA_MPS_LOG_DIRECTORY
 nvidia-cuda-mps-control -d
 ```
 
+### Letting `SimulationManager` handle it
+
+If you run your simulations through `SimulationManager`, you don't need to start MPS yourself:
+`worker_manager()` starts a private MPS daemon for the batch, runs the queued simulations as
+concurrent worker processes spread evenly over the visible GPUs, and stops the daemon (and removes
+its pipe directory) afterwards, even if the batch fails.
+
+```python
+mgr = SimulationManager(max_sims_per_gpu=8)   # n_processes defaults to the CPUs available
+for sim in sims:
+    mgr.queue_sim(sim)
+failures = mgr.worker_manager(run_when_failed=True)  # blocks; returns the error messages of failed sims
+mgr.shutdown()
+```
+
+- GPUs are assigned to the simulation by `CUDA_device`, counting from the first entry of
+  `CUDA_VISIBLE_DEVICES` if you have set it (e.g. a slurm allocation of GPUs 2 and 3 gives devices 0 and 1).
+- `max_sims_per_gpu` defaults to 48 while MPS is in use, which is NVIDIA's documented client limit for
+  Volta and newer (60 was measured on an RTX 5090). Past the limit new CUDA contexts fail to connect.
+- A simulation whose worker process dies without reporting (killed, segfault, CUDA failure) counts as
+  failed. With the default `run_when_failed=False` the first failure terminates the whole batch and
+  exits; with `run_when_failed=True` the other simulations carry on.
+- If `CUDA_MPS_PIPE_DIRECTORY` already points at a running daemon (e.g. the commands above, in your
+  job script) it is used as is and left running. If `nvidia-cuda-mps-control` is missing or doesn't
+  respond, a warning is issued and the simulations run without MPS. Pass `use_mps=False` to skip MPS.
+- The daemon's logs are kept in `/tmp/mps-log_<pid>_<id>` (the path is printed); look there if
+  simulations fail to start on the GPU.
+
 ## Prerequisites
 
 We suggest installing in a [conda](https://www.anaconda.com/download) or [mamba](https://mamba.readthedocs.io/en/latest/index.html) environment.
