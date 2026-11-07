@@ -121,6 +121,26 @@ class TestSIUnits:
             si_units(1.0, "dna", "T", to="F")
 
 
+class TestSiUnitsTime:
+    def test_seconds_default(self):
+        assert si_units(1.0, "dna", "time") == pytest.approx(3.03e-12)
+
+    def test_ps_and_ns(self):
+        assert si_units(2.0, "dna", "t", to="ps") == pytest.approx(6.06)
+        assert si_units(1.0, "rna", "time", to="ns") == pytest.approx(3.06e-3)
+
+    def test_roundtrip_with_ox_units(self):
+        assert ox_units(si_units(5.0, "dna", "time", to="ns"), "dna", units="ns") == pytest.approx(5.0)
+
+    def test_larger_prefixes(self):
+        assert si_units(1.0, "dna", "time", to="us") == pytest.approx(3.03e-6)
+        assert si_units(1e15, "dna", "time", to="ks") == pytest.approx(3.03)
+
+    def test_invalid_unit_raises(self):
+        with pytest.raises(ValueError):
+            si_units(1.0, "dna", "time", to="fortnight")
+
+
 # ---------------------------------------------------------------------------
 # ox_units
 # ---------------------------------------------------------------------------

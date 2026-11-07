@@ -39,20 +39,30 @@ acknowledgments in comments around worker process exit / queue flushing.
 ## `results.csv` schema (`export_results()`)
 
 Columns: `flux, shoot1, ..., shootK, total`. Rows: `num_attempts`,
-`num_successes`, `success_ratio`.
+`num_successes`, `success_ratio`, `rate_per_oxdna_time_unit`, `rate_per_<unit>`.
 
 - **`flux` column**: `num_successes` = count of flux-stage success configs;
-  `num_attempts` = `fluxer.total_success_time()` — i.e. this column's
-  "attempts" is actually total simulated time used as the flux-rate
-  denominator, not a literal attempt count. Don't read it as "N trials were
-  attempted."
+  `num_attempts` = total simulation steps summed over those success
+  configs (`num_successes / fluxer.compute_flux()`) — a step count, not a
+  literal attempt count. `success_ratio` = `fluxer.compute_flux()` itself,
+  in successes per step (not successes/attempts like the shooter columns).
 - **Each `shootK` column**: `num_attempts = sum(shooter.attempt_from)` across
   all starting configs used by that shooter; `num_successes =
   shooter.success_count.value`.
-- **`success_ratio`** per column = successes / attempts.
+- **`success_ratio`** per shooter column = successes / attempts; for the
+  `flux` column it is the flux itself (successes per step).
 - **`total`** = `numpy.prod` of every column's `success_ratio` — this is
   exactly the FFS rate-constant estimator
-  `k ≈ Φ_A · Π_i P(λ_{i+1} | λ_i)`.
+  `k ≈ Φ_A · Π_i P(λ_{i+1} | λ_i)`, in successes per simulation step
+  (multiply by 1/dt for per-oxDNA-time-unit).
+- **`rate_per_oxdna_time_unit` / `rate_per_<unit>`** rows: only the `flux` and
+  `total` columns are filled (shooter columns are dimensionless). The first is
+  `success_ratio / dt`. The second's name and unit adapt: `<unit>` is the
+  smallest SI time unit (ps, ns, us, ms, s, ks, ... from `SI_TIME_UNITS`) in
+  which both rates are > 1 (falls back to `s` if neither rate is positive and
+  finite, and to the largest unit if none qualifies). `dt` and
+  `interaction_type` come from `set_input_params` if set, otherwise the default
+  ffs input file; interaction types containing "RNA" use RNA units, else DNA.
 
 There is no uncertainty/error-bar column and no committor calculation in
 this output — if you need error bars, you'll need to run repeated

@@ -66,6 +66,20 @@ JOULES_PER_UNIT = {
     "dna": 4.142e-20
 }
 
+# SI time units supported by si_units, smallest to largest, in seconds
+SI_TIME_UNITS = {
+    "ps": 1e-12,
+    "ns": 1e-9,
+    "us": 1e-6,
+    "ms": 1e-3,
+    "s": 1.,
+    "ks": 1e3,
+    "Ms": 1e6,
+    "Gs": 1e9,
+    "Ts": 1e12,
+    "Ps": 1e15,
+}
+
 # Okabe-Ito colorblind-friendly palette (RGBA, 8 colors)
 # Distinguishable under deuteranopia, protanopia, and tritanopia.
 # Reference: Okabe & Ito (2008), "Color Universal Design"
@@ -113,6 +127,15 @@ def si_units(measurement: Union[str, float, np.array], interaction_type: str, me
             raise ValueError(f"Unsupported temperature conversion to {to}")
     elif measurement_type == "distance" or measurement_type == "d" or measurement_type == "du":
         return METERS_PER_UNIT[interaction_type] * measurement
+    elif measurement_type == "time" or measurement_type == "t":
+        # `measurement` is in simulation time units; convert to seconds (default), ns, or ps
+        if to is None:
+            to = "s"
+        if to == "μs":
+            to = "us"
+        if to not in SI_TIME_UNITS:
+            raise ValueError(f"Unsupported time conversion to {to}")
+        return SECONDS_PER_UNIT[interaction_type] * measurement / SI_TIME_UNITS[to]
 
 
 def ox_units(measurement: Union[str, float], interaction_type: str, units: Optional[str] = None) -> float:

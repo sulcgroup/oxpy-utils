@@ -105,21 +105,17 @@ class FFSFluxGenerator(BaseFluxSampler):
         confs = glob.glob(str(self.destination_directory / success_pattern))
         return confs
 
-    def total_success_time(self):
-        stime = 0.
-        confs = self.get_success_confs()
-        for conf in confs:
-            with open(conf, 'r') as f:
-                t = int(f.readline().split('=')[1])
-                stime += t
-        return len(confs) / stime
-
-
     def compute_flux(self):
         """
-        compute flux by running simulations until we have the desired number of successes
+        compute the flux, in successes per simulation step, from the success confs in
+        the destination directory (including any from previous runs with the same pattern)
         """
-        return len(self.get_success_confs()) / self.total_success_time()
+        confs = self.get_success_confs()
+        total_steps = 0
+        for conf in confs:
+            with open(conf, 'r') as f:
+                total_steps += int(f.readline().split('=')[1])
+        return len(confs) / total_steps
 
 
     def run(self):
@@ -176,11 +172,11 @@ class FFSFluxGenerator(BaseFluxSampler):
 
     # TODO: add param to write a message to the directory explaining what we're trying to do
     def make_ffs_simulation(self,
-                            origin: Union[Simulation, Path],
+                            origin: Simulation | Path,
                             sim_dir: Path,
                             seed: int,
                             other_inputs: dict[str, Any],
-                            ffs_condition: Union[Condition, None] = None) -> Simulation:
+                            ffs_condition: Condition | None = None) -> Simulation:
         """
 
         """

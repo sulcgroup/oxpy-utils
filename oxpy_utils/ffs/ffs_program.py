@@ -20,7 +20,9 @@ from .ffs_interface import FFSInterface
 from .ffs_shoot import FFSShooter
 from .flux_generator import FFSFluxGenerator
 from ..defaults.defaults import default_input_exist
+from ..defaults.defaults import get_default_input
 from ..utils.oxlog import OxLogHandler
+from ..utils.util import si_units, SI_TIME_UNITS
 
 import hashlib
 from collections import defaultdict
@@ -371,15 +373,30 @@ class FFSProgram:
         flux_nodes = [n for n in G.nodes if n[0] == "flux"]
         return G.subgraph(flux_nodes)
 
+    def _input_param(self, key: str) -> str:
+        """
+        looks up the value of an oxDNA input parameter as it will be seen by the ffs simulations:
+        values set via set_input_params override the default ffs input file
+        """
+        if key in self.input_file_params:
+            return str(self.input_file_params[key])
+        default = get_default_input(self.ffs_default_input_name)
+        default.evaluate()
+        return str(default.get_dict()[key])
+
     def export_results(self, fname: str = "results.csv"):
         export_data = pd.DataFrame(
             columns=["flux", *[shooter.name for shooter in self.shooters], "total"],
-            index=["num_attempts", "num_successes", "success_ratio"]
+            index=["num_attempts", "num_successes", "success_ratio", "rate_per_oxdna_time_unit"]
         )
 
         # Populate flux column
-        export_data.loc["num_successes", "flux"] = len(self.fluxer.get_success_confs())
-        export_data.loc["num_attempts", "flux"] = self.fluxer.total_success_time()
+        # for the flux column, "attempts" are simulation steps and the "ratio" is the
+        # flux itself, in successes per step
+        flux = self.fluxer.compute_flux()
+        n_flux_successes = len(self.fluxer.get_success_confs())
+        export_data.loc["num_successes", "flux"] = n_flux_successes
+        export_data.loc["num_attempts", "flux"] = n_flux_successes / flux
 
         # Populate shooter columns
         for shooter in self.shooters:
@@ -388,12 +405,39 @@ class FFSProgram:
 
         # Compute success_ratio for all columns except "total"
         cols = ["flux", *[shooter.name for shooter in self.shooters]]
-        export_data.loc["success_ratio", cols] = (
-                export_data.loc["num_successes", cols] / export_data.loc["num_attempts", cols]
+        shooter_cols = cols[1:]
+        export_data.loc["success_ratio", shooter_cols] = (
+                export_data.loc["num_successes", shooter_cols] / export_data.loc["num_attempts", shooter_cols]
         )
+        export_data.loc["success_ratio", "flux"] = flux
 
-        # Compute total as product of all success_ratios
+        # Compute total (rate constant, in successes per step) as flux * product of shooter probabilities
         export_data.loc["success_ratio", "total"] = np.prod(export_data.loc["success_ratio", cols].values)
+
+        # convert the rates (flux and total) from successes per step to successes per oxDNA
+        # time unit and to successes per second. Shooter columns are dimensionless probabilities,
+        # so they are left blank in these rows.
+        dt = float(self._input_param("dt"))  # oxDNA time units per step
+        interaction_type = "rna" if "RNA" in self._input_param("interaction_type").upper() else "dna"
+        rate_cols = ("flux", "total")
+        for col in rate_cols:
+            export_data.loc["rate_per_oxdna_time_unit", col] = export_data.loc["success_ratio", col] / dt
+
+        # physical-time row: pick the smallest SI time unit in which both rates are > 1
+        # (a rate per unit time gets larger as the time unit gets larger)
+        rates_per_ox = [float(export_data.loc["rate_per_oxdna_time_unit", col]) for col in rate_cols]
+        valid_rates = [r for r in rates_per_ox if np.isfinite(r) and r > 0]
+        time_unit = "s"  # fallback if no rate is usable
+        if valid_rates:
+            time_unit = list(SI_TIME_UNITS)[-1]  # fall back to the largest unit
+            for unit in SI_TIME_UNITS:
+                if all(r / si_units(1., interaction_type, "time", unit) > 1 for r in valid_rates):
+                    time_unit = unit
+                    break
+        row = f"rate_per_{time_unit}"
+        export_data.loc[row] = np.nan
+        for col, r in zip(rate_cols, rates_per_ox):
+            export_data.loc[row, col] = r / si_units(1., interaction_type, "time", time_unit)
 
         export_data.to_csv(self.root_dir / fname)
 
