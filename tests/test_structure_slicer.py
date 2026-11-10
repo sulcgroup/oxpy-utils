@@ -117,10 +117,14 @@ def test_structure_slicer_workflow(tmp_path: Path):
 
     # ------------------------------------------------------------------ #
     # Step 2: MD relax — equilibrate velocities and softer constraints
+    # Must run long enough that every backbone bond ends up inside the FENE
+    # range: the relax inputs use max_backbone_force, which disables oxDNA's
+    # bonded-distance check, so the first non-relax stage (cuda_MD below)
+    # refuses to start if any bond is still overstretched.
     # ------------------------------------------------------------------ #
     md_relax_dir = tmp_path / "2_md_relax"
     md_relax_sim = Simulation(mc_dir, md_relax_dir)
-    _run_sim(md_relax_sim, "cuda_MD_relax", steps=2500, print_every=100)
+    _run_sim(md_relax_sim, "cuda_MD_relax", steps=20000, print_every=1000)
 
     assert md_relax_sim.sim_files.last_conf.exists()
     assert md_relax_sim.sim_files.last_conf.stat().st_size > 0

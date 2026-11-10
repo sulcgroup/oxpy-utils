@@ -13,7 +13,7 @@
 	"delta_rotation": 0.22,
 	"diff_coeff": 2.5,
 	"max_backbone_force": 5,
-	"max_backhone_force_far": 10,
+	"max_backbone_force_far": 10,
 	"lastconf_file": "last_conf.dat",
 	"trajectory_file": "trajectory.dat",
 	"energy_file": "energy.dat",
