@@ -9,6 +9,13 @@ from oxpy_utils.structure_editor.structure_slicer import StructureSlicer
 
 CUBE_DIR = Path(__file__).parent / "test_data" / "cube"
 
+# Every stage uses this oxDNA seed so the relaxed structure, and so whether production can start, is the same on
+# every run. The relax stages run on the CPU because oxDNA's CUDA backend isn't bit-reproducible even with a fixed
+# seed (its force sums aren't deterministic), and a relax is chaotic enough to amplify that: the occasional
+# overstretched bond left behind made this test fail intermittently. Production and the sliced run don't need to
+# be reproducible (the checks on them have generous tolerances), so production stays on CUDA.
+SEED = 20261110
+
 # A contiguous sub-region of the cube origami used as the slice target.
 BASES = [
     530, 531, 532, 533, 534, 535, 536, 537, 538, 539, 540, 541, 542, 543, 544, 545, 546,
@@ -89,7 +96,7 @@ def _run_sim(sim: Simulation, default_type: str, steps: int, print_every: int = 
     """Build, configure, and run a simulation in-process."""
     sim.build()
     sim.input.swap_default_input(default_type)
-    params = {"steps": str(steps)}
+    params = {"steps": str(steps), "seed": str(SEED)}
     if print_every is not None:
         params["print_conf_interval"] = str(print_every)
         params["print_energy_every"] = str(print_every)
@@ -109,6 +116,7 @@ def test_structure_slicer_workflow(tmp_path: Path):
     mc_sim = Simulation(CUBE_DIR, mc_dir)
     mc_sim.build()
     mc_sim.input.swap_default_input("cpu_MC_relax")
+    mc_sim.input_file({"seed": str(SEED)})
     mc_sim.oxpy_run.run(subprocess=False)
 
     assert mc_sim.sim_files.last_conf.exists()
@@ -117,14 +125,14 @@ def test_structure_slicer_workflow(tmp_path: Path):
 
     # ------------------------------------------------------------------ #
     # Step 2: MD relax — equilibrate velocities and softer constraints
-    # Must run long enough that every backbone bond ends up inside the FENE
-    # range: the relax inputs use max_backbone_force, which disables oxDNA's
-    # bonded-distance check, so the first non-relax stage (cuda_MD below)
-    # refuses to start if any bond is still overstretched.
+    # Every backbone bond must end up inside the FENE range: the relax inputs
+    # use max_backbone_force, which disables oxDNA's bonded-distance check, so
+    # the first non-relax stage (cuda_MD below) refuses to start if any bond is
+    # still overstretched. On the CPU (see SEED) so the result is reproducible.
     # ------------------------------------------------------------------ #
     md_relax_dir = tmp_path / "2_md_relax"
     md_relax_sim = Simulation(mc_dir, md_relax_dir)
-    _run_sim(md_relax_sim, "cuda_MD_relax", steps=20000, print_every=1000)
+    _run_sim(md_relax_sim, "cpu_MD_relax", steps=3000, print_every=1000)
 
     assert md_relax_sim.sim_files.last_conf.exists()
     assert md_relax_sim.sim_files.last_conf.stat().st_size > 0
