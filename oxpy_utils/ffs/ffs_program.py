@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from .ffs_interface import FFSInterface
 from .ffs_shoot import FFSShooter
 from .flux_generator import FFSFluxGenerator
+from .weighted_flux_generator import RestartOnFailFluxGenerator, WeightedSourceFluxGenerator
 from ..defaults.defaults import default_input_exist
 from ..defaults.defaults import get_default_input
 from ..utils.oxlog import OxLogHandler
@@ -102,6 +103,32 @@ class FFSProgram:
         if len(self.shooters) > 0:
             for shooter in self.shooters:
                 shooter.default_input_name = value
+
+    def use_source_pool(self, confs, weights=None, restart_after_success: bool = True,
+                        restart_on_fail: bool = False):
+        """
+        Replace the flux generator with a WeightedSourceFluxGenerator that equilibrates each worker
+        (re)start from a conf drawn by weight from `confs` (see weighted_flux_generator.py and
+        stratified_weights() for building weights from a distribution of some slow variable).
+        The pool confs are copied into the source directory, which must also hold the topology.
+        Call before set_interfaces().
+
+        restart_on_fail: use a RestartOnFailFluxGenerator instead. The pool confs must already be
+        past lambda_{-1}; every attempt runs from a drawn conf (no equilibration) to lambda_0 or
+        lambda_fail, then restarts from a new draw. The resulting flux is biased (time beyond
+        lambda_fail is never simulated); see RestartOnFailFluxGenerator.
+        """
+        assert len(self.shooters) == 0, "call use_source_pool() before set_interfaces()"
+        old = self.fluxer
+        cls = RestartOnFailFluxGenerator if restart_on_fail else WeightedSourceFluxGenerator
+        fluxer = cls(old.name, old.working_directory, old.destination_directory)
+        fluxer.set_num_cpus(old.ncpus)
+        fluxer.source_directory = old.source_directory
+        fluxer.default_input_name = old.default_input_name
+        fluxer.restart_after_success = restart_after_success
+        fluxer.set_source_pool(confs, weights)
+        fluxer.write_pool()
+        self.fluxer = fluxer
 
     def set_input_params(self, **kwargs):
         """

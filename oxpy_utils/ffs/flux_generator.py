@@ -53,6 +53,20 @@ class FFSFluxGenerator(BaseFluxSampler):
     # for flux generation, the interface we're trying to reach is the same as the success interface for this step
     lambda_plus1 = property(lambda self: self.lambda_n)
 
+    # if True, a worker goes back to equilibration (and so, in subclasses, to a freshly chosen starting
+    # conf, see choose_source_conf) after every lambda_0 success, instead of running the post-success
+    # trajectory back into the basin and continuing from there. Both are valid: the flux only counts
+    # time spent in the basin, and a re-equilibrated conf starts a new trajectory in it.
+    restart_after_success: bool = False
+
+    def choose_source_conf(self, rng: rnd.Random) -> Union[str, None]:
+        """
+        name of the conf file in self.source_directory to equilibrate from at the start of a worker's
+        (re)start, or None to use whichever conf Simulation finds there (the default: one conf).
+        Subclasses override this to draw from a pool; see WeightedSourceFluxGenerator.
+        """
+        return None
+
     def set_interfaces(self,
                        lambda_0: FFSInterface,
                        lambda_neg1: FFSInterface,
@@ -176,12 +190,16 @@ class FFSFluxGenerator(BaseFluxSampler):
                             sim_dir: Path,
                             seed: int,
                             other_inputs: dict[str, Any],
-                            ffs_condition: Condition | None = None) -> Simulation:
+                            ffs_condition: Condition | None = None,
+                            conf_file_name: str | None = None) -> Simulation:
         """
-
+        conf_file_name: name of the starting conf inside `origin` (a directory); if None, Simulation
+        picks the conf in that directory itself.
         """
         # todo: employ matt's defaults system when he writes it
         sim = Simulation(origin if isinstance(origin, Path) else origin.sim_dir, sim_dir)
+        if conf_file_name is not None:
+            sim.build_sim.conf_file_name = conf_file_name
         sim.build(clean_build='force')
 
         # set default input to flux
@@ -228,7 +246,8 @@ class FFSFluxGenerator(BaseFluxSampler):
         while self.success_count.value < self.desired_success_count:
             # ----- step 1: initial relax ---------
             # do this every time w/ a random seed to make sure we have different starting points for our simulation
-            plogger.info("equilibration started")
+            source_conf = self.choose_source_conf(myrng)
+            plogger.info("equilibration started" + (f" from {source_conf}" if source_conf else ""))
             eq_sim = self.make_ffs_simulation(self.source_directory,
                                               self.tld() / f"p{process_idx}/sim{sim_counter}",
                                               myrng.randint(1, int(5e6)), {
@@ -237,7 +256,11 @@ class FFSFluxGenerator(BaseFluxSampler):
                                                   "refresh_vel": 1,
                                                   "print_energy_every": 1e2,
                                                   "restart_step_counter": 0
-                                              })
+                                              },
+                                              conf_file_name=source_conf)
+            if source_conf is not None:
+                # provenance: which pool conf this worker (re)started from
+                (eq_sim.sim_dir / "source_conf.txt").write_text(source_conf + "\n")
             eq_sim_id = (self.name, process_idx, sim_counter)
             # if running as part of a larger program, log info
             if self.update_queue is not None:
@@ -375,6 +398,10 @@ class FFSFluxGenerator(BaseFluxSampler):
                     sim_counter += 1
 
                     plogger.info("Worker %d: crossed interface lambda_{0} going forwards: SUCCESS" % process_idx)
+
+                    if self.restart_after_success:
+                        plogger.info(f"Worker {process_idx}: restarting from equilibration after success")
+                        break  # back to the outer loop: choose a source conf and equilibrate again
 
                     # ---------------- continue back across lambda_{0} ----------------------
                     # now that the simulation is past the lambda_{0} interface, we need to continue running it
