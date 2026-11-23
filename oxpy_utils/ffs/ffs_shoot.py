@@ -186,8 +186,8 @@ class FFSShooter(BaseFluxSampler):
 
     def ffs_process(self, process_idx: int, plogger: logging.Logger):
         plogger.info(f"Worker {process_idx} started")
-        # sim counter is process-specific
-        sim_counter = 0
+        # sim counter is process-specific; a resumed run continues after the sims of earlier launches
+        sim_counter = self.sim_index_start.get(process_idx, 0)
         # while we haven't reached desired success count yet
         while self.success_count.value < self.desired_success_count:
             # choose a starting configuration index
@@ -213,7 +213,8 @@ class FFSShooter(BaseFluxSampler):
                     process_idx,
                     sim_counter,
                     self.name,
-                    conf_index
+                    conf_index,
+                    {"source_conf": str(self.starting_confs[conf_index]), "seed": seed}
                 ))
             sim.oxpy_run.run(subprocess=False)
             plogger.info(f"Shoot complete. Execution time: {((time.time() - tstart) / 1000):.1f}ms")
@@ -234,7 +235,8 @@ class FFSShooter(BaseFluxSampler):
                         f"{sim.sim_dir}/{sim.input.input_dict['lastconf_file']}",
                         self.destination_directory / f"success_{str(self.success_count.value)}.dat"
                     )
-                    plogger.info(f"SUCCESS: starting from conf_index {conf_index} and seed {seed}")
+                    plogger.info(f"SUCCESS: starting from conf_index {conf_index} and seed {seed}; "
+                                 f"wrote success_{self.success_count.value}.dat")
                     if self.update_queue is not None:
                         self.update_queue.put((
                             "CPY_CONF",
@@ -253,7 +255,7 @@ class FFSShooter(BaseFluxSampler):
                         ))
             elif not success and failure:
                 # do else
-                plogger.info(f"FAILURE: starting from conf_index {process_idx} and seed {seed}")
+                plogger.info(f"FAILURE: starting from conf_index {conf_index} and seed {seed}")
                 if self.update_queue is not None:
                     self.update_queue.put((
                         "shoot_report",

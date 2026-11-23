@@ -104,6 +104,9 @@ class BaseFluxSampler(ABC):
 
         # passing data back to main process is optional
         self.update_queue = None
+        # first simulation index of each worker process (worker index -> sim index). FFSProgram sets it on a
+        # resumed run so new sims (and their process graph nodes and p<i>/sim<k> dirs) don't reuse earlier ones
+        self.sim_index_start: dict[int, int] = {}
 
         self.input_file_params = {}
 

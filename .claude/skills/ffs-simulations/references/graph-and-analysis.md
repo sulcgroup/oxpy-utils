@@ -15,10 +15,43 @@ Remember this queue is a **class attribute**, shared across every
 `FFSProgram` instance in the same Python process — see the Gotchas section
 in the main skill file.
 
-Persistence: `save_graph()` / `load_graph()` serialize/deserialize the graph
-to/from `process_graph.json` at the run's top-level output directory. The
-`ffs_cli.py` script registers `save_graph` via `safe_exit.register(...)` so
-the graph is flushed even on interruption (Ctrl-C, unhandled exception).
+Persistence: the listener appends every message to
+`process_graph_events.jsonl` in the root dir (one line `{"t": unix time,
+"cmd": [message]}`, line-buffered, so it survives a crash) before applying
+it. That event log is the complete record:
+
+- `run()` replays an existing log first (`replay_graph_events()`), so a
+  relaunch in the same root dir (resume after a crash, or more interfaces
+  added) extends the graph instead of starting over, and logs a `LAUNCH`
+  event (`process_graph.graph["launches"]`).
+- Each step's sim counters continue after the replayed ones
+  (`next_sim_indices()` -> `step.sim_index_start`), so node ids
+  `(step, process, sim)` and `p<i>/sim<k>` dirs are never reused.
+- `load()` replays the log (falls back to `process_graph.json`).
+- `save_graph()` / `load_graph()` still write/read the `process_graph.json`
+  snapshot (now with a `"graph"` key holding `launches`); it only contains
+  what was in memory, so prefer the log. `ffs_cli.py` registers `save_graph`
+  via `safe_exit.register(...)`.
+
+Before 2026-11 (branch ffs-process-graph) there was no event log: each
+launch's `save_graph()` replaced the previous graph, `load()` did not load
+anything, and resumed stages restarted sim numbering at 0.
+
+## Lineage attributes
+
+- A node that wrote a success conf (`CPY_CONF`) has `success_index` (n of
+  `success_<n>.dat`) and `success_conf` (its path).
+- A shoot node has `source_conf`, `source_step` (the stage that wrote it:
+  `initial_flux` for shoot1, else the previous shooter) and
+  `source_success_index`, plus `seed`, and an edge from the node that wrote
+  its starting conf — also when that node is from an earlier launch.
+- Flux nodes started from a pool conf (`equilibrate` in
+  `FFSFluxGenerator`, `flux_fwd` in `RestartOnFailFluxGenerator`) carry
+  `source_conf` (and `seed` for restart-on-fail).
+
+So a success's full history is the path from `origin` to its node, e.g.
+`nx.shortest_path(G, "origin", node)`. The shooter logs also name the file
+each success wrote (`SUCCESS: ...; wrote success_<n>.dat`).
 
 ## `plot_graph()`
 

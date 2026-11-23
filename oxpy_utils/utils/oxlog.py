@@ -44,7 +44,12 @@ class OxLogHandler:
         Destructor to stop the log listener.
         """
         if hasattr(self, 'log_listener') and self.log_listener:
-            self.log_listener.stop()
+            try:
+                self.log_listener.stop()
+            except RuntimeError:
+                # at interpreter shutdown the queue can't start the feeder thread stop() needs; the listener
+                # thread is a daemon and ends with the interpreter anyway
+                pass
 
     def spinoff(self, name: str) -> logging.Logger:
         """

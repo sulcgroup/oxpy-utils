@@ -86,8 +86,8 @@ Analysis-only re-run (no simulation re-executed):
 ```python
 program = FFSProgram(...)                    # same construction
 program.set_interfaces(*interfaces)          # same interfaces, needed to rebuild shooter names
-program.load()                               # reload success logs from disk
-program.load_graph()                         # reload process_graph.json
+program.load()                               # reload success logs; replays process_graph_events.jsonl
+# program.load_graph()                       # only for runs without an event log (process_graph.json)
 program.export_results()                     # -> results.csv
 program.plot_graph()                         # -> process_graph.svg
 ```
@@ -165,6 +165,12 @@ what `tests/test_forward_flux_sample_OO.py` actually points at).
   every 300s, so a hard crash can lose up to 5 minutes of shooting
   statistics (though the success configs themselves are written immediately
   on success).
+- **Resuming / extending a run keeps one process graph.** Relaunch in the
+  same root dir (e.g. with more interfaces): `run()` replays
+  `process_graph_events.jsonl`, continues sim numbering, and links new shoot
+  nodes to success confs written by earlier launches. Don't delete or
+  replace that file between launches; `process_graph.json` is only a
+  snapshot. Per-success lineage: see `references/graph-and-analysis.md`.
 - **Look at per-stage logs, not the top-level one.** The top-level
   `<name>.log` file tends to end up empty; real diagnostics live in
   `initial_flux.log`, `shoot1.log`, etc.

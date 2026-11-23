@@ -241,7 +241,8 @@ class FFSFluxGenerator(BaseFluxSampler):
         myrng = rnd.Random()
         myrng.seed(seed)
 
-        sim_counter = 0  # process-specific sim counter
+        # process-specific sim counter; a resumed run continues after the sims of earlier launches
+        sim_counter = self.sim_index_start.get(process_idx, 0)
         # outer while loop
         while self.success_count.value < self.desired_success_count:
             # ----- step 1: initial relax ---------
@@ -270,7 +271,8 @@ class FFSFluxGenerator(BaseFluxSampler):
                     sim_counter,
                     # can find other input file params in directory using this info
                     "equilibrate",
-                    "origin"
+                    "origin",
+                    {"source_conf": source_conf} if source_conf is not None else {}
                 ))
             sim_counter += 1
             # do not use OxpyRun multiprocessing, since we're already in an mps thread
