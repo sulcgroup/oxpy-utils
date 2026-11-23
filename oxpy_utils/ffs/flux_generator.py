@@ -53,6 +53,20 @@ class FFSFluxGenerator(BaseFluxSampler):
     # for flux generation, the interface we're trying to reach is the same as the success interface for this step
     lambda_plus1 = property(lambda self: self.lambda_n)
 
+    # if True, a worker goes back to equilibration (and so, in subclasses, to a freshly chosen starting
+    # conf, see choose_source_conf) after every lambda_0 success, instead of running the post-success
+    # trajectory back into the basin and continuing from there. Both are valid: the flux only counts
+    # time spent in the basin, and a re-equilibrated conf starts a new trajectory in it.
+    restart_after_success: bool = False
+
+    def choose_source_conf(self, rng: rnd.Random) -> Union[str, None]:
+        """
+        name of the conf file in self.source_directory to equilibrate from at the start of a worker's
+        (re)start, or None to use whichever conf Simulation finds there (the default: one conf).
+        Subclasses override this to draw from a pool; see WeightedSourceFluxGenerator.
+        """
+        return None
+
     def set_interfaces(self,
                        lambda_0: FFSInterface,
                        lambda_neg1: FFSInterface,
@@ -176,12 +190,16 @@ class FFSFluxGenerator(BaseFluxSampler):
                             sim_dir: Path,
                             seed: int,
                             other_inputs: dict[str, Any],
-                            ffs_condition: Condition | None = None) -> Simulation:
+                            ffs_condition: Condition | None = None,
+                            conf_file_name: str | None = None) -> Simulation:
         """
-
+        conf_file_name: name of the starting conf inside `origin` (a directory); if None, Simulation
+        picks the conf in that directory itself.
         """
         # todo: employ matt's defaults system when he writes it
         sim = Simulation(origin if isinstance(origin, Path) else origin.sim_dir, sim_dir)
+        if conf_file_name is not None:
+            sim.build_sim.conf_file_name = conf_file_name
         sim.build(clean_build='force')
 
         # set default input to flux
@@ -223,12 +241,14 @@ class FFSFluxGenerator(BaseFluxSampler):
         myrng = rnd.Random()
         myrng.seed(seed)
 
-        sim_counter = 0  # process-specific sim counter
+        # process-specific sim counter; a resumed run continues after the sims of earlier launches
+        sim_counter = self.first_sim_index(process_idx)
         # outer while loop
         while self.success_count.value < self.desired_success_count:
             # ----- step 1: initial relax ---------
             # do this every time w/ a random seed to make sure we have different starting points for our simulation
-            plogger.info("equilibration started")
+            source_conf = self.choose_source_conf(myrng)
+            plogger.info("equilibration started" + (f" from {source_conf}" if source_conf else ""))
             eq_sim = self.make_ffs_simulation(self.source_directory,
                                               self.tld() / f"p{process_idx}/sim{sim_counter}",
                                               myrng.randint(1, int(5e6)), {
@@ -237,7 +257,11 @@ class FFSFluxGenerator(BaseFluxSampler):
                                                   "refresh_vel": 1,
                                                   "print_energy_every": 1e2,
                                                   "restart_step_counter": 0
-                                              })
+                                              },
+                                              conf_file_name=source_conf)
+            if source_conf is not None:
+                # provenance: which pool conf this worker (re)started from
+                (eq_sim.sim_dir / "source_conf.txt").write_text(source_conf + "\n")
             eq_sim_id = (self.name, process_idx, sim_counter)
             # if running as part of a larger program, log info
             if self.update_queue is not None:
@@ -247,9 +271,12 @@ class FFSFluxGenerator(BaseFluxSampler):
                     sim_counter,
                     # can find other input file params in directory using this info
                     "equilibrate",
-                    "origin"
+                    "origin",
+                    {"path": str(eq_sim.sim_dir),
+                     **({"source_conf": source_conf} if source_conf is not None else {})}
                 ))
             sim_counter += 1
+            self.record_sim_index(process_idx, sim_counter)
             # do not use OxpyRun multiprocessing, since we're already in an mps thread
             eq_sim.oxpy_run.run(subprocess=False)
             if eq_sim.oxpy_run.error_message:
@@ -274,9 +301,11 @@ class FFSFluxGenerator(BaseFluxSampler):
                     process_idx,
                     sim_counter,
                     "reset",
-                    eq_sim_id
+                    eq_sim_id,
+                    {"path": str(init_sim.sim_dir)}
                 ))
             sim_counter += 1
+            self.record_sim_index(process_idx, sim_counter)
             # # run
 
             # tried adding observable but this didn't work
@@ -317,13 +346,15 @@ class FFSFluxGenerator(BaseFluxSampler):
                         process_idx,
                         sim_counter,
                         "to_l-1_fwd",
-                        source_node_id
+                        source_node_id,
+                        {"path": str(sim.sim_dir)}
                     ))
 
                 # ------- flux sample -------------
                 # continue running simulation until we either fail or hit the lambda_{0} interface
                 source_node_id = (self.name, process_idx, sim_counter)
                 sim_counter += 1
+                self.record_sim_index(process_idx, sim_counter)
                 sim = self.make_ffs_simulation(sim,
                                                self.tld() / f"p{process_idx}/sim{sim_counter}",
                                                myrng.randint(1, 50000),
@@ -338,7 +369,8 @@ class FFSFluxGenerator(BaseFluxSampler):
                         process_idx,
                         sim_counter,
                         "flux_fwd",
-                        source_node_id
+                        source_node_id,
+                        {"path": str(sim.sim_dir)}
                     ))
                 # run
 
@@ -373,8 +405,12 @@ class FFSFluxGenerator(BaseFluxSampler):
                             ))
                     source_node_id = (self.name, process_idx, sim_counter)
                     sim_counter += 1
-
+                    self.record_sim_index(process_idx, sim_counter)
                     plogger.info("Worker %d: crossed interface lambda_{0} going forwards: SUCCESS" % process_idx)
+
+                    if self.restart_after_success:
+                        plogger.info(f"Worker {process_idx}: restarting from equilibration after success")
+                        break  # back to the outer loop: choose a source conf and equilibrate again
 
                     # ---------------- continue back across lambda_{0} ----------------------
                     # now that the simulation is past the lambda_{0} interface, we need to continue running it
@@ -391,9 +427,11 @@ class FFSFluxGenerator(BaseFluxSampler):
                             process_idx,
                             sim_counter,
                             "flux_back",
-                            source_node_id
+                            source_node_id,
+                            {"path": str(sim.sim_dir)}
                         ))
                     sim_counter += 1
+                    self.record_sim_index(process_idx, sim_counter)
                     # run
                     sim.oxpy_run.run(subprocess=False)
 
@@ -403,8 +441,8 @@ class FFSFluxGenerator(BaseFluxSampler):
 
                     # did we fully dissociate? gotta start over them
                     if complete_success:
-                        shutil.copy(f"{sim.sim_dir}/{sim.input.input_dict['lastconf_file']}",
-                                    "full_success" + str(self.success_count.value))
+                        # the trajectory went on past lambda_0 to the final interface
+                        self.keep_conf(sim, "full_success", process_idx)
                         plogger.info(f"Worker {process_idx} has reached a complete success: restarting from equilibration")
                         break  # this breakes the innermost while cycle, which will also start next iteration of main loop
                     else:  # ok we're back in our begin state, can continue from that
@@ -412,6 +450,7 @@ class FFSFluxGenerator(BaseFluxSampler):
                 elif failure and not success: # slammed into the fail condition
                     plogger.info("Worker %d: crossed interface lambda_{-1} going backwards" % process_idx)
                     sim_counter += 1
+                    self.record_sim_index(process_idx, sim_counter)
                 else:
                     raise Exception("fail condition" + str(self.lambda_fail) + " coexist with success condition " + str(self.lambda_n) )
         plogger.info(f"Achieved desired success count, process #{process_idx} terminating....")

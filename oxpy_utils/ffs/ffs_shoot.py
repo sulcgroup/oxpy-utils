@@ -16,7 +16,6 @@ from ..utils.oxlog import OxLogHandler
 import pandas as pd
 import numpy as np
 
-undetermined_pattern = './undefin_*.dat'
 
 # for debugging
 import threading
@@ -186,8 +185,8 @@ class FFSShooter(BaseFluxSampler):
 
     def ffs_process(self, process_idx: int, plogger: logging.Logger):
         plogger.info(f"Worker {process_idx} started")
-        # sim counter is process-specific
-        sim_counter = 0
+        # sim counter is process-specific; a resumed run continues after the sims of earlier launches
+        sim_counter = self.first_sim_index(process_idx)
         # while we haven't reached desired success count yet
         while self.success_count.value < self.desired_success_count:
             # choose a starting configuration index
@@ -213,7 +212,8 @@ class FFSShooter(BaseFluxSampler):
                     process_idx,
                     sim_counter,
                     self.name,
-                    conf_index
+                    conf_index,
+                    {"source_conf": str(self.starting_confs[conf_index]), "seed": seed, "path": str(sim_dir)}
                 ))
             sim.oxpy_run.run(subprocess=False)
             plogger.info(f"Shoot complete. Execution time: {((time.time() - tstart) / 1000):.1f}ms")
@@ -234,7 +234,8 @@ class FFSShooter(BaseFluxSampler):
                         f"{sim.sim_dir}/{sim.input.input_dict['lastconf_file']}",
                         self.destination_directory / f"success_{str(self.success_count.value)}.dat"
                     )
-                    plogger.info(f"SUCCESS: starting from conf_index {conf_index} and seed {seed}")
+                    plogger.info(f"SUCCESS: starting from conf_index {conf_index} and seed {seed}; "
+                                 f"wrote success_{self.success_count.value}.dat")
                     if self.update_queue is not None:
                         self.update_queue.put((
                             "CPY_CONF",
@@ -253,7 +254,7 @@ class FFSShooter(BaseFluxSampler):
                         ))
             elif not success and failure:
                 # do else
-                plogger.info(f"FAILURE: starting from conf_index {process_idx} and seed {seed}")
+                plogger.info(f"FAILURE: starting from conf_index {conf_index} and seed {seed}")
                 if self.update_queue is not None:
                     self.update_queue.put((
                         "shoot_report",
@@ -271,11 +272,8 @@ class FFSShooter(BaseFluxSampler):
                              f"\n{txt}")
                 with self.undetermined_lock:
                     self.undetermined_count.value += 1
-                    if self.keep_undetermined:
-                        shutil.copy(
-                            f"{sim.sim_dir}/{sim.input.input_dict['lastconf_file']}",
-                            f"{undetermined_pattern + str(self.undetermined_count.value)}.dat"
-                        )
+                if self.keep_undetermined:
+                    self.keep_conf(sim, "undetermined", process_idx)
                 if self.update_queue is not None:
                     self.update_queue.put((
                         "shoot_report",
@@ -288,7 +286,7 @@ class FFSShooter(BaseFluxSampler):
                 shutil.rmtree(sim_dir)
                 plogger.info(f"Deleted temporary simulation directory {str(sim_dir)}")
             sim_counter += 1
-
+            self.record_sim_index(process_idx, sim_counter)
         plogger.info(f"Reached desired success count {self.desired_success_count}. Worker {process_idx} returning")
         threads = threading.enumerate()
         # if sending stuff to an update queue

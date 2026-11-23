@@ -15,10 +15,62 @@ Remember this queue is a **class attribute**, shared across every
 `FFSProgram` instance in the same Python process — see the Gotchas section
 in the main skill file.
 
-Persistence: `save_graph()` / `load_graph()` serialize/deserialize the graph
-to/from `process_graph.json` at the run's top-level output directory. The
-`ffs_cli.py` script registers `save_graph` via `safe_exit.register(...)` so
-the graph is flushed even on interruption (Ctrl-C, unhandled exception).
+Persistence: the listener appends every message to
+`process_graph_events.jsonl` in the root dir (one line `{"t": unix time,
+"cmd": [message]}`, line-buffered, so it survives a crash) before applying
+it. That event log is the complete record:
+
+- `run()` replays an existing log first (`replay_graph_events()`), so a
+  relaunch in the same root dir (resume after a crash, or more interfaces
+  added) extends the graph instead of starting over, and logs a `LAUNCH`
+  event (`process_graph.graph["launches"]`).
+- Sim numbering: all steps share one counter per worker process
+  (`FFSProgram.sim_counters`, a multiprocessing Array; steps read it with
+  `first_sim_index()` and advance it with `record_sim_index()`), so worker
+  `i`'s sims are numbered consecutively through the flux stage and every
+  shooter, and each `p<i>/sim<k>` dir and node id `(step, process, sim)`
+  belongs to one step. `run()` seeds it with `next_sim_indices()`: one past
+  every index in the replayed graph or found as a `p<i>/sim<k>` dir in any
+  step's working directory.
+- Every node has a `path` (the sim dir), reported by the worker.
+- Confs kept outside the successes (`BaseFluxSampler.keep_conf()`): a
+  `FFSFluxGenerator` trajectory that continues past lambda_0 all the way to
+  lambda_s goes to `<flux dest>/full_success/full_success_p<i>_sim<k>.dat`;
+  with `FFSShooter.keep_undetermined`, undetermined shots go to
+  `<shooter dest>/undetermined/undetermined_p<i>_sim<k>.dat`. The sim's node
+  gets `full_success_conf` / `undetermined_conf` (via a `node_attrs`
+  message). Before 2026-11 these were written to the current working
+  directory as `full_success<n>` / `./undefin_<n>.dat`, overwriting each
+  other across workers and runs.
+- `load()` replays the log (falls back to `process_graph.json`).
+- `save_graph()` / `load_graph()` still write/read the `process_graph.json`
+  snapshot (now with a `"graph"` key holding `launches`); it only contains
+  what was in memory, so prefer the log. `ffs_cli.py` registers `save_graph`
+  via `safe_exit.register(...)`.
+
+Before 2026-11 (branch ffs-process-graph) there was no event log: each
+launch's `save_graph()` replaced the previous graph, `load()` did not load
+anything, and every step numbered its sims from 0 in the same
+`root_dir/p<i>/sim<k>` dirs. Each shooter's sim was built with
+`clean_build='force'` over the flux (or previous shooter's) sim of the same
+index, wiping it (and deleting it with `keep_sim_dirs=False`); scripts worked
+around it by giving shooters their own `set_working_directory()`.
+
+## Lineage attributes
+
+- A node that wrote a success conf (`CPY_CONF`) has `success_index` (n of
+  `success_<n>.dat`) and `success_conf` (its path).
+- A shoot node has `source_conf`, `source_step` (the stage that wrote it:
+  `initial_flux` for shoot1, else the previous shooter) and
+  `source_success_index`, plus `seed`, and an edge from the node that wrote
+  its starting conf — also when that node is from an earlier launch.
+- Flux nodes started from a pool conf (`equilibrate` in
+  `FFSFluxGenerator`, `flux_fwd` in `RestartOnFailFluxGenerator`) carry
+  `source_conf` (and `seed` for restart-on-fail).
+
+So a success's full history is the path from `origin` to its node, e.g.
+`nx.shortest_path(G, "origin", node)`. The shooter logs also name the file
+each success wrote (`SUCCESS: ...; wrote success_<n>.dat`).
 
 ## `plot_graph()`
 

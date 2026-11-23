@@ -2,6 +2,7 @@ import glob
 import multiprocessing
 import os
 import re
+import shutil
 import signal
 import time
 from abc import ABC, abstractmethod
@@ -104,6 +105,11 @@ class BaseFluxSampler(ABC):
 
         # passing data back to main process is optional
         self.update_queue = None
+        # next free simulation index of each worker process (a multiprocessing Array indexed by worker index).
+        # FFSProgram shares one between all its steps and seeds it from earlier launches, so every p<i>/sim<k>
+        # directory and process graph node belongs to one step, and p<i> follows worker i through the program.
+        # None: this step numbers its sims from 0 (standalone use)
+        self.sim_counters = None
 
         self.input_file_params = {}
 
@@ -118,6 +124,33 @@ class BaseFluxSampler(ABC):
         self.initial_success_count = len(glob.glob(str(self.destination_directory / success_pattern)))
         self.destination_directory.mkdir(exist_ok=True)
         self.success_count.value = self.initial_success_count
+
+    def keep_conf(self, sim, kind: str, process_idx: int) -> Path:
+        """
+        Keep the last conf of a sim that ended in an outcome worth looking at but is not one of the step's
+        successes (kind, e.g. "full_success" or "undetermined"): copy it to
+        <destination dir>/<kind>/<kind>_p<i>_sim<k>.dat, named after the sim dir (unique within an FFSProgram,
+        whose steps share per-worker sim numbering), outside the success_*.dat files the next step draws from.
+        The sim's process graph node gets "<kind>_conf": that path. Returns the path.
+        """
+        sim_dir = Path(sim.sim_dir)
+        dest_dir = self.destination_directory / kind
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / f"{kind}_{sim_dir.parent.name}_{sim_dir.name}.dat"
+        shutil.copy(sim_dir / sim.input.input_dict["lastconf_file"], dest)
+        if self.update_queue is not None:
+            sim_idx = int(re.fullmatch(r"sim(\d+)", sim_dir.name).group(1))
+            self.update_queue.put(("node_attrs", process_idx, sim_idx, self.name, {f"{kind}_conf": str(dest)}))
+        return dest
+
+    def first_sim_index(self, process_idx: int) -> int:
+        """the simulation index worker process_idx starts this step at"""
+        return int(self.sim_counters[process_idx]) if self.sim_counters is not None else 0
+
+    def record_sim_index(self, process_idx: int, next_index: int):
+        """worker process_idx has used every sim index below next_index (the next step's worker continues from it)"""
+        if self.sim_counters is not None:
+            self.sim_counters[process_idx] = next_index
 
     def set_num_cpus(self, newVal: int):
         self.ncpus = newVal
