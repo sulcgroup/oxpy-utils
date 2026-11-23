@@ -187,7 +187,7 @@ class FFSShooter(BaseFluxSampler):
     def ffs_process(self, process_idx: int, plogger: logging.Logger):
         plogger.info(f"Worker {process_idx} started")
         # sim counter is process-specific; a resumed run continues after the sims of earlier launches
-        sim_counter = self.sim_index_start.get(process_idx, 0)
+        sim_counter = self.first_sim_index(process_idx)
         # while we haven't reached desired success count yet
         while self.success_count.value < self.desired_success_count:
             # choose a starting configuration index
@@ -214,7 +214,7 @@ class FFSShooter(BaseFluxSampler):
                     sim_counter,
                     self.name,
                     conf_index,
-                    {"source_conf": str(self.starting_confs[conf_index]), "seed": seed}
+                    {"source_conf": str(self.starting_confs[conf_index]), "seed": seed, "path": str(sim_dir)}
                 ))
             sim.oxpy_run.run(subprocess=False)
             plogger.info(f"Shoot complete. Execution time: {((time.time() - tstart) / 1000):.1f}ms")
@@ -290,7 +290,7 @@ class FFSShooter(BaseFluxSampler):
                 shutil.rmtree(sim_dir)
                 plogger.info(f"Deleted temporary simulation directory {str(sim_dir)}")
             sim_counter += 1
-
+            self.record_sim_index(process_idx, sim_counter)
         plogger.info(f"Reached desired success count {self.desired_success_count}. Worker {process_idx} returning")
         threads = threading.enumerate()
         # if sending stuff to an update queue

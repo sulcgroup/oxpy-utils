@@ -188,7 +188,7 @@ class RestartOnFailFluxGenerator(WeightedSourceFluxGenerator):
                 with log_path.open() as f:
                     logged_next = max((int(row["sim"][3:]) + 1 for row in csv.DictReader(f)), default=0)
             # and after any sim the process graph saw (e.g. an attempt cut short before it was logged)
-            sim_counter = max(logged_next, self.sim_index_start.get(process_idx, 0))
+            sim_counter = max(logged_next, self.first_sim_index(process_idx))
 
             while self.success_count.value < self.desired_success_count:
                 source_conf = self.choose_source_conf(myrng)
@@ -201,7 +201,7 @@ class RestartOnFailFluxGenerator(WeightedSourceFluxGenerator):
                 }, self.pass_or_fail, conf_file_name=source_conf)
                 if self.update_queue is not None:
                     self.update_queue.put(("flux", process_idx, sim_counter, "flux_fwd", "origin",
-                                           {"source_conf": source_conf, "seed": seed}))
+                                           {"source_conf": source_conf, "seed": seed, "path": str(sim_dir)}))
                 sim.oxpy_run.run(subprocess=False)
                 if sim.oxpy_run.error_message:
                     raise Exception(sim.oxpy_run.error_message)
@@ -237,4 +237,5 @@ class RestartOnFailFluxGenerator(WeightedSourceFluxGenerator):
                 if not self.keep_sim_dirs:
                     shutil.rmtree(sim_dir)
                 sim_counter += 1
+                self.record_sim_index(process_idx, sim_counter)
         plogger.info(f"Achieved desired success count, process #{process_idx} terminating....")

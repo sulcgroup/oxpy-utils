@@ -115,26 +115,72 @@ def test_shoot_links_to_conf_written_in_earlier_launch(tmp_path):
     assert graph_summary(prog3) == graph_summary(prog2)
 
 
-def test_next_sim_indices_continue_after_replayed_sims(tmp_path):
+def test_next_sim_indices_cover_all_steps_and_disk(tmp_path):
     prog = make_program(tmp_path / "run")
     first_launch(prog)
-    assert prog.next_sim_indices(FLUX) == {0: 4}
-    assert prog.next_sim_indices("shoot1") == {1: 1}
-    assert prog.next_sim_indices("shoot2") == {}
+    # per worker, across steps: worker 0 ran flux sims 0-3, worker 1 shoot1 sim 0
+    assert prog.next_sim_indices() == {0: 4, 1: 1}
+    # sim dirs on disk count too, in any step's working directory (e.g. a shooter moved elsewhere)
+    (tmp_path / "run" / "p0" / "sim7").mkdir(parents=True)
+    prog.shooters[1].set_working_directory(tmp_path / "run" / "shoot_sims" / "shoot2")
+    (tmp_path / "run" / "shoot_sims" / "shoot2" / "p3" / "sim2").mkdir(parents=True)
+    (tmp_path / "run" / "pairs_work" / "simple").mkdir(parents=True)  # not a p<i>/sim<k> dir
+    assert prog.next_sim_indices() == {0: 8, 1: 1, 3: 3}
 
 
-def test_run_replays_and_sets_sim_index_start(tmp_path, monkeypatch):
+def test_run_seeds_one_counter_shared_by_all_steps(tmp_path, monkeypatch):
     prog = make_program(tmp_path / "run")
     first_launch(prog)
     prog2 = make_program(tmp_path / "run")
-    for step in [prog2.fluxer, *prog2.shooters]:  # no simulations: only the graph bookkeeping of run()
+    for step in [prog2.fluxer, *prog2.shooters]:  # no simulations: only the bookkeeping of run()
         monkeypatch.setattr(step, "init", lambda: None)
         monkeypatch.setattr(step, "run", lambda: None)
     prog2.run()
-    assert prog2.fluxer.sim_index_start == {0: 4}
-    assert prog2.shooters[0].sim_index_start == {1: 1}
+    steps = [prog2.fluxer, *prog2.shooters]
+    assert all(step.sim_counters is prog2.sim_counters for step in steps)
+    assert [step.first_sim_index(0) for step in steps] == [4, 4, 4]
+    assert [step.first_sim_index(1) for step in steps] == [1, 1, 1]
     assert graph_summary(prog2) == graph_summary(prog)
     assert len(prog2.process_graph.graph["launches"]) == 2  # run() logs its own LAUNCH event
+
+
+def advance_counter(step, process_idx, next_index):
+    step.record_sim_index(process_idx, next_index)
+
+
+def test_next_step_continues_where_worker_left_off(tmp_path):
+    import multiprocessing
+    prog = make_program(tmp_path / "run")
+    prog.sim_counters = multiprocessing.Array("i", 2)
+    for step in [prog.fluxer, *prog.shooters]:
+        step.sim_counters = prog.sim_counters
+    # a forked flux worker 1 uses sims 0-4; shoot1's worker 1 then starts at 5
+    p = multiprocessing.get_context("fork").Process(target=advance_counter, args=(prog.fluxer, 1, 5))
+    p.start()
+    p.join(timeout=30)
+    assert p.exitcode == 0
+    assert prog.shooters[0].first_sim_index(1) == 5
+    assert prog.shooters[0].first_sim_index(0) == 0
+
+
+def test_standalone_step_numbers_from_zero(tmp_path):
+    prog = make_program(tmp_path / "run")
+    assert prog.fluxer.sim_counters is None
+    prog.fluxer.record_sim_index(0, 9)  # no-op without a shared counter
+    assert prog.fluxer.first_sim_index(0) == 0
+
+
+def test_nodes_record_reported_sim_paths(tmp_path):
+    prog = make_program(tmp_path / "run")
+    send(prog,
+         ("flux", 0, 0, "flux_fwd", "origin", {"path": "/elsewhere/p0/sim0"}),
+         ("flux", 0, 1, "flux_back", (FLUX, 0, 0)),
+         ("CPY_CONF", FLUX, 0, 0, 0),
+         ("shoot", 0, 2, "shoot1", 0, {"source_conf": "c", "path": "/run/shoot_sims/shoot1/p0/sim2"}))
+    g = prog.process_graph
+    assert g.nodes[(FLUX, 0, 0)]["path"] == "/elsewhere/p0/sim0"
+    assert g.nodes[(FLUX, 0, 1)]["path"] == str(tmp_path / "run" / "p0" / "sim1")  # old message: root_dir default
+    assert g.nodes[("shoot1", 0, 2)]["path"] == "/run/shoot_sims/shoot1/p0/sim2"
 
 
 def test_old_style_messages_still_work(tmp_path):

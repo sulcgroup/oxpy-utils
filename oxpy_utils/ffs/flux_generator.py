@@ -242,7 +242,7 @@ class FFSFluxGenerator(BaseFluxSampler):
         myrng.seed(seed)
 
         # process-specific sim counter; a resumed run continues after the sims of earlier launches
-        sim_counter = self.sim_index_start.get(process_idx, 0)
+        sim_counter = self.first_sim_index(process_idx)
         # outer while loop
         while self.success_count.value < self.desired_success_count:
             # ----- step 1: initial relax ---------
@@ -272,9 +272,11 @@ class FFSFluxGenerator(BaseFluxSampler):
                     # can find other input file params in directory using this info
                     "equilibrate",
                     "origin",
-                    {"source_conf": source_conf} if source_conf is not None else {}
+                    {"path": str(eq_sim.sim_dir),
+                     **({"source_conf": source_conf} if source_conf is not None else {})}
                 ))
             sim_counter += 1
+            self.record_sim_index(process_idx, sim_counter)
             # do not use OxpyRun multiprocessing, since we're already in an mps thread
             eq_sim.oxpy_run.run(subprocess=False)
             if eq_sim.oxpy_run.error_message:
@@ -299,9 +301,11 @@ class FFSFluxGenerator(BaseFluxSampler):
                     process_idx,
                     sim_counter,
                     "reset",
-                    eq_sim_id
+                    eq_sim_id,
+                    {"path": str(init_sim.sim_dir)}
                 ))
             sim_counter += 1
+            self.record_sim_index(process_idx, sim_counter)
             # # run
 
             # tried adding observable but this didn't work
@@ -342,13 +346,15 @@ class FFSFluxGenerator(BaseFluxSampler):
                         process_idx,
                         sim_counter,
                         "to_l-1_fwd",
-                        source_node_id
+                        source_node_id,
+                        {"path": str(sim.sim_dir)}
                     ))
 
                 # ------- flux sample -------------
                 # continue running simulation until we either fail or hit the lambda_{0} interface
                 source_node_id = (self.name, process_idx, sim_counter)
                 sim_counter += 1
+                self.record_sim_index(process_idx, sim_counter)
                 sim = self.make_ffs_simulation(sim,
                                                self.tld() / f"p{process_idx}/sim{sim_counter}",
                                                myrng.randint(1, 50000),
@@ -363,7 +369,8 @@ class FFSFluxGenerator(BaseFluxSampler):
                         process_idx,
                         sim_counter,
                         "flux_fwd",
-                        source_node_id
+                        source_node_id,
+                        {"path": str(sim.sim_dir)}
                     ))
                 # run
 
@@ -398,7 +405,7 @@ class FFSFluxGenerator(BaseFluxSampler):
                             ))
                     source_node_id = (self.name, process_idx, sim_counter)
                     sim_counter += 1
-
+                    self.record_sim_index(process_idx, sim_counter)
                     plogger.info("Worker %d: crossed interface lambda_{0} going forwards: SUCCESS" % process_idx)
 
                     if self.restart_after_success:
@@ -420,9 +427,11 @@ class FFSFluxGenerator(BaseFluxSampler):
                             process_idx,
                             sim_counter,
                             "flux_back",
-                            source_node_id
+                            source_node_id,
+                            {"path": str(sim.sim_dir)}
                         ))
                     sim_counter += 1
+                    self.record_sim_index(process_idx, sim_counter)
                     # run
                     sim.oxpy_run.run(subprocess=False)
 
@@ -441,6 +450,7 @@ class FFSFluxGenerator(BaseFluxSampler):
                 elif failure and not success: # slammed into the fail condition
                     plogger.info("Worker %d: crossed interface lambda_{-1} going backwards" % process_idx)
                     sim_counter += 1
+                    self.record_sim_index(process_idx, sim_counter)
                 else:
                     raise Exception("fail condition" + str(self.lambda_fail) + " coexist with success condition " + str(self.lambda_n) )
         plogger.info(f"Achieved desired success count, process #{process_idx} terminating....")

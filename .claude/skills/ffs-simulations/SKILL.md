@@ -171,6 +171,12 @@ what `tests/test_forward_flux_sample_OO.py` actually points at).
   nodes to success confs written by earlier launches. Don't delete or
   replace that file between launches; `process_graph.json` is only a
   snapshot. Per-success lineage: see `references/graph-and-analysis.md`.
+- **`p<i>/sim<k>` dirs are numbered per worker across all stages.** The flux
+  stage and every shooter share one counter per worker, so shoot1's sims in
+  worker `i` come after its flux sims and nothing overwrites another stage's
+  sim dir; deleting a shooter's sims (`keep_sim_dirs=False`) only removes its
+  own. Shooters still default to `root_dir` as working dir;
+  `set_working_directory()` is only needed to put them elsewhere.
 - **Look at per-stage logs, not the top-level one.** The top-level
   `<name>.log` file tends to end up empty; real diagnostics live in
   `initial_flux.log`, `shoot1.log`, etc.

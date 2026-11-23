@@ -104,9 +104,11 @@ class BaseFluxSampler(ABC):
 
         # passing data back to main process is optional
         self.update_queue = None
-        # first simulation index of each worker process (worker index -> sim index). FFSProgram sets it on a
-        # resumed run so new sims (and their process graph nodes and p<i>/sim<k> dirs) don't reuse earlier ones
-        self.sim_index_start: dict[int, int] = {}
+        # next free simulation index of each worker process (a multiprocessing Array indexed by worker index).
+        # FFSProgram shares one between all its steps and seeds it from earlier launches, so every p<i>/sim<k>
+        # directory and process graph node belongs to one step, and p<i> follows worker i through the program.
+        # None: this step numbers its sims from 0 (standalone use)
+        self.sim_counters = None
 
         self.input_file_params = {}
 
@@ -121,6 +123,15 @@ class BaseFluxSampler(ABC):
         self.initial_success_count = len(glob.glob(str(self.destination_directory / success_pattern)))
         self.destination_directory.mkdir(exist_ok=True)
         self.success_count.value = self.initial_success_count
+
+    def first_sim_index(self, process_idx: int) -> int:
+        """the simulation index worker process_idx starts this step at"""
+        return int(self.sim_counters[process_idx]) if self.sim_counters is not None else 0
+
+    def record_sim_index(self, process_idx: int, next_index: int):
+        """worker process_idx has used every sim index below next_index (the next step's worker continues from it)"""
+        if self.sim_counters is not None:
+            self.sim_counters[process_idx] = next_index
 
     def set_num_cpus(self, newVal: int):
         self.ncpus = newVal

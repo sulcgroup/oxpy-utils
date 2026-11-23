@@ -24,9 +24,15 @@ it. That event log is the complete record:
   relaunch in the same root dir (resume after a crash, or more interfaces
   added) extends the graph instead of starting over, and logs a `LAUNCH`
   event (`process_graph.graph["launches"]`).
-- Each step's sim counters continue after the replayed ones
-  (`next_sim_indices()` -> `step.sim_index_start`), so node ids
-  `(step, process, sim)` and `p<i>/sim<k>` dirs are never reused.
+- Sim numbering: all steps share one counter per worker process
+  (`FFSProgram.sim_counters`, a multiprocessing Array; steps read it with
+  `first_sim_index()` and advance it with `record_sim_index()`), so worker
+  `i`'s sims are numbered consecutively through the flux stage and every
+  shooter, and each `p<i>/sim<k>` dir and node id `(step, process, sim)`
+  belongs to one step. `run()` seeds it with `next_sim_indices()`: one past
+  every index in the replayed graph or found as a `p<i>/sim<k>` dir in any
+  step's working directory.
+- Every node has a `path` (the sim dir), reported by the worker.
 - `load()` replays the log (falls back to `process_graph.json`).
 - `save_graph()` / `load_graph()` still write/read the `process_graph.json`
   snapshot (now with a `"graph"` key holding `launches`); it only contains
@@ -35,7 +41,11 @@ it. That event log is the complete record:
 
 Before 2026-11 (branch ffs-process-graph) there was no event log: each
 launch's `save_graph()` replaced the previous graph, `load()` did not load
-anything, and resumed stages restarted sim numbering at 0.
+anything, and every step numbered its sims from 0 in the same
+`root_dir/p<i>/sim<k>` dirs. Each shooter's sim was built with
+`clean_build='force'` over the flux (or previous shooter's) sim of the same
+index, wiping it (and deleting it with `keep_sim_dirs=False`); scripts worked
+around it by giving shooters their own `set_working_directory()`.
 
 ## Lineage attributes
 

@@ -1,6 +1,7 @@
 import logging
 import multiprocessing
 import queue
+import re
 import threading
 import time
 from pathlib import Path
@@ -92,6 +93,8 @@ class FFSProgram:
 
         # use a graph to keep track of process (origin node = start conf)
         self.reset_graph()
+        # next free sim index per worker process, shared by all steps; created by run()
+        self.sim_counters = None
         # self.graph_listener = threading.Thread(target=self._graph_updater, daemon=True)
         self.keep_sim_dirs = True
 
@@ -188,10 +191,14 @@ class FFSProgram:
         """
         runs fluxer and shooters sequentially
 
+        Simulation indices: all steps share one counter per worker process (sim_counters), so worker i's sims
+        are numbered consecutively through the whole program, and each p<i>/sim<k> directory (in a step's working
+        directory) and process graph node belongs to exactly one step.
+
         Resuming a run (same root_dir, e.g. after a crash or to add interfaces): the process graph is kept as an
         append-only event log (graph_events_path()). If one exists it is replayed first, so the graph keeps every
-        earlier launch, shoot nodes can be linked to confs produced by earlier launches, and each step's
-        simulation indices continue past the ones already used (no node id collisions, no sim dirs reused).
+        earlier launch and shoot nodes can be linked to confs produced by earlier launches; the counters start
+        past every sim index already used (next_sim_indices()).
         """
         self.fluxer.set_desired_success_count(self.desired_n_successes)
         self.fluxer.input_file_params = self.input_file_params
@@ -200,8 +207,14 @@ class FFSProgram:
             n_events = self.replay_graph_events()
             self.loghandler.spinoff("main").info(
                 f"replayed {n_events} process graph events from {self.graph_events_path()}")
+        start = self.next_sim_indices()
+        # shared with the worker processes (inherited); slots for workers of earlier, larger launches are kept so
+        # the indices stay readable, but only 0..n_cpus-1 are used
+        self.sim_counters = multiprocessing.Array("i", max([self.n_cpus, *(p + 1 for p in start)]))
+        for p, k in start.items():
+            self.sim_counters[p] = k
         for step in [self.fluxer, *self.shooters]:
-            step.sim_index_start = self.next_sim_indices(step.name)
+            step.sim_counters = self.sim_counters
         self.graph_update_queue.put(("LAUNCH", {"time": time.time(), "n_cpus": self.n_cpus,
                                                 "desired_n_successes": self.desired_n_successes}))
         self.graph_listener = threading.Thread(target=self._graph_updater, daemon=True)
@@ -288,12 +301,25 @@ class FFSProgram:
                 n_events += 1
         return n_events
 
-    def next_sim_indices(self, step_name: str) -> dict[int, int]:
-        """per worker process index, one past the largest simulation index the graph holds for this step"""
+    def next_sim_indices(self) -> dict[int, int]:
+        """
+        Per worker process index, one past the largest simulation index already used by any step: in the process
+        graph, or as a p<i>/sim<k> directory in any step's working directory (which also covers runs without an
+        event log, and sims a crash cut short before they reached the graph).
+        """
         start: dict[int, int] = {}
+
+        def seen(p: int, k: int):
+            start[p] = max(start.get(p, 0), k + 1)
+
         for node in self.process_graph.nodes:
-            if isinstance(node, tuple) and node[0] == step_name:
-                start[node[1]] = max(start.get(node[1], 0), node[2] + 1)
+            if isinstance(node, tuple):
+                seen(node[1], node[2])
+        for work_dir in {step.tld() for step in [self.fluxer, *self.shooters]}:
+            for sim_dir in work_dir.glob("p*/sim*"):
+                p, k = re.fullmatch(r"p(\d+)", sim_dir.parent.name), re.fullmatch(r"sim(\d+)", sim_dir.name)
+                if p and k and sim_dir.is_dir():
+                    seen(int(p.group(1)), int(k.group(1)))
         return start
 
     def step_by_name(self, name: str):
@@ -310,9 +336,9 @@ class FFSProgram:
         2. "CPY_CONF" - step_name: str, process_idx: int, sim_idx: int, conf_count: int (0-based success index).
            The node gets success_index (conf_count + 1) and success_conf (the success_<n>.dat it wrote).
         3. "flux" - process_idx: int, sim_idx: int, fluxer_step: str, source node id, [attrs: dict]
-           (e.g. {"source_conf": ...} for a sim started from a pool conf)
+           (the sim's "path"; "source_conf" for a sim started from a pool conf)
         4. "shoot" - process_idx: int, sim_idx: int, shoot_name: str, source_conf_idx: int (0-based index of the
-           starting conf among the previous step's successes), [attrs: dict] (e.g. {"source_conf": path}).
+           starting conf among the previous step's successes), [attrs: dict] ("path", "source_conf", "seed").
            The node gets source_step / source_success_index, and an edge from the node that wrote that conf.
         5. "shoot_report" - process_idx: int, sim_idx: int, shoot_name: str, status: bool or "undetermined"
         6. "flux_report" - process_idx: int, sim_idx: int, status: bool or "undetermined"
@@ -347,12 +373,11 @@ class FFSProgram:
                     assert fluxer_step in ["equilibrate", "reset", "to_l-1_fwd", "flux_fwd", "flux_back"]
                     # identify nodes with 3-length tuple of program step, process idx, sim idx
                     node_id: tuple[str, int, int] = (self.fluxer.name, process_idx, sim_idx)
-                    self.process_graph.add_node(
-                        node_id,
-                        fluxer_step=fluxer_step,
-                        path=str(self.root_dir / f"p{process_idx}" / f"sim{sim_idx}"),
-                        **(extra[0] if extra else {})
-                    )
+                    # workers report the sim's path; older messages did not, and the flux sims were in root_dir
+                    attrs = {"fluxer_step": fluxer_step,
+                             "path": str(self.root_dir / f"p{process_idx}" / f"sim{sim_idx}"),
+                             **(extra[0] if extra else {})}
+                    self.process_graph.add_node(node_id, **attrs)
                     assert source_sim != node_id, "Cannot have self-loop in process graph - source sim cannot be the same node as the new flux node"
                     assert source_sim == "origin" or self.process_graph.nodes[node_id]["fluxer_step"] != self.process_graph.nodes[source_sim]["fluxer_step"], f"Cannot have two nodes with the same fluxer_step in parent-child relationship - check graph structure for errors. Node: {node_id}, source node: {source_sim}, fluxer_step of new node: {self.process_graph.nodes[node_id]['fluxer_step']}, fluxer_step of source node: {self.process_graph.nodes[source_sim]['fluxer_step']}"
                     self.process_graph.add_edge(source_sim, node_id)
