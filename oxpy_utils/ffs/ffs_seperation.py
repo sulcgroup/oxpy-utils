@@ -300,8 +300,7 @@ class SeperationFluxer(BaseFluxSampler):
 
                     # did we fully dissociate? gotta start over them
                     if complete_success:
-                        shutil.copy(f"{sim.sim_dir}/{sim.input.input_dict['lastconf_file']}",
-                                    "full_success" + str(self.success_count.value))
+                        self.keep_conf(sim, "full_success", idx)
                         plogger.info(f"Worker {idx} has reached a complete success: restarting from equilibration")
                         break  # this breakes the innermost while cycle, which will also start next iteration of main loop
                     else:  # ok we're back in our begin state, can continue from that

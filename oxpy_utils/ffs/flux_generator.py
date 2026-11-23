@@ -441,8 +441,8 @@ class FFSFluxGenerator(BaseFluxSampler):
 
                     # did we fully dissociate? gotta start over them
                     if complete_success:
-                        shutil.copy(f"{sim.sim_dir}/{sim.input.input_dict['lastconf_file']}",
-                                    "full_success" + str(self.success_count.value))
+                        # the trajectory went on past lambda_0 to the final interface
+                        self.keep_conf(sim, "full_success", process_idx)
                         plogger.info(f"Worker {process_idx} has reached a complete success: restarting from equilibration")
                         break  # this breakes the innermost while cycle, which will also start next iteration of main loop
                     else:  # ok we're back in our begin state, can continue from that

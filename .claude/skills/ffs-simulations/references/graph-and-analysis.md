@@ -33,6 +33,15 @@ it. That event log is the complete record:
   every index in the replayed graph or found as a `p<i>/sim<k>` dir in any
   step's working directory.
 - Every node has a `path` (the sim dir), reported by the worker.
+- Confs kept outside the successes (`BaseFluxSampler.keep_conf()`): a
+  `FFSFluxGenerator` trajectory that continues past lambda_0 all the way to
+  lambda_s goes to `<flux dest>/full_success/full_success_p<i>_sim<k>.dat`;
+  with `FFSShooter.keep_undetermined`, undetermined shots go to
+  `<shooter dest>/undetermined/undetermined_p<i>_sim<k>.dat`. The sim's node
+  gets `full_success_conf` / `undetermined_conf` (via a `node_attrs`
+  message). Before 2026-11 these were written to the current working
+  directory as `full_success<n>` / `./undefin_<n>.dat`, overwriting each
+  other across workers and runs.
 - `load()` replays the log (falls back to `process_graph.json`).
 - `save_graph()` / `load_graph()` still write/read the `process_graph.json`
   snapshot (now with a `"graph"` key holding `launches`); it only contains

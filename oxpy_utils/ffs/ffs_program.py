@@ -342,6 +342,8 @@ class FFSProgram:
            The node gets source_step / source_success_index, and an edge from the node that wrote that conf.
         5. "shoot_report" - process_idx: int, sim_idx: int, shoot_name: str, status: bool or "undetermined"
         6. "flux_report" - process_idx: int, sim_idx: int, status: bool or "undetermined"
+        7. "node_attrs" - process_idx: int, sim_idx: int, step_name: str, attrs: dict (added to an existing node,
+           e.g. {"full_success_conf": path} from keep_conf())
         Best effort: a malformed/out-of-order message (e.g. one dropped by a race between a worker process exiting
         and its queue feeder thread flushing) is logged and skipped, so it can't stop the rest of the graph.
         """
@@ -415,6 +417,12 @@ class FFSProgram:
                     node_id = (self.fluxer.name, process_idx, sim_idx)
                     # queue is FIFO, node should already be in graph
                     self.process_graph.nodes[node_id]["success"] = status  # can be true, false, or "undetermined"
+                elif cmd_type == "node_attrs":
+                    step_name, attrs = args
+                    node_id = (step_name, process_idx, sim_idx)
+                    if node_id not in self.process_graph:
+                        raise KeyError(f"no node {node_id} to add {attrs} to")
+                    self.process_graph.nodes[node_id].update(attrs)
                 else:
                     raise Exception(f"Unknown command type {cmd_type}")
         except Exception as e:

@@ -16,7 +16,6 @@ from ..utils.oxlog import OxLogHandler
 import pandas as pd
 import numpy as np
 
-undetermined_pattern = './undefin_*.dat'
 
 # for debugging
 import threading
@@ -273,11 +272,8 @@ class FFSShooter(BaseFluxSampler):
                              f"\n{txt}")
                 with self.undetermined_lock:
                     self.undetermined_count.value += 1
-                    if self.keep_undetermined:
-                        shutil.copy(
-                            f"{sim.sim_dir}/{sim.input.input_dict['lastconf_file']}",
-                            f"{undetermined_pattern + str(self.undetermined_count.value)}.dat"
-                        )
+                if self.keep_undetermined:
+                    self.keep_conf(sim, "undetermined", process_idx)
                 if self.update_queue is not None:
                     self.update_queue.put((
                         "shoot_report",

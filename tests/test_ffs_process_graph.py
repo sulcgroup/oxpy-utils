@@ -231,3 +231,27 @@ def test_load_prefers_event_log(tmp_path):
     prog2 = make_program(tmp_path / "run")
     prog2.load()
     assert graph_summary(prog2) == graph_summary(prog)
+
+
+def test_keep_conf_copies_into_step_dir_and_records_it(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    prog = make_program(tmp_path / "run")
+    monkeypatch.chdir(tmp_path)  # nothing may be written to the current directory
+    sim_dir = tmp_path / "run" / "p0" / "sim12"
+    sim_dir.mkdir(parents=True)
+    (sim_dir / "last_conf.dat").write_text("t = 5\n")
+    sim = SimpleNamespace(sim_dir=sim_dir, input=SimpleNamespace(input_dict={"lastconf_file": "last_conf.dat"}))
+    listener = threading.Thread(target=prog._graph_updater, daemon=True)
+    listener.start()
+    prog.graph_update_queue.put(("flux", 0, 12, "flux_back", "origin", {"path": str(sim_dir)}))
+    kept = prog.fluxer.keep_conf(sim, "full_success", 0)
+    shooter_kept = prog.shooters[0].keep_conf(sim, "undetermined", 0)
+    prog.graph_update_queue.put(("TERMINATE",))
+    listener.join(timeout=30)
+    assert kept == prog.fluxer.destination_directory / "full_success" / "full_success_p0_sim12.dat"
+    assert kept.read_text() == "t = 5\n"
+    assert shooter_kept == prog.shooters[0].destination_directory / "undetermined" / "undetermined_p0_sim12.dat"
+    assert prog.process_graph.nodes[(FLUX, 0, 12)]["full_success_conf"] == str(kept)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["run"]
+    # not among the successes the next step draws from
+    assert list(prog.fluxer.destination_directory.glob("success_*.dat")) == []
