@@ -1,14 +1,26 @@
-import sys
+import atexit
 import logging
 import multiprocessing
+import multiprocessing.util  # imported before atexit.register below, see close_all_handlers
+import os
+import sys
+import weakref
 from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
+
+# every OxLogHandler not yet closed, so they can all be closed at exit
+open_handlers = weakref.WeakSet()
 
 
 class OxLogHandler:
     def __init__(self, name: str, verbose: bool = True, log_to_dir: Path = Path(".")):
         """
         Initialize the OxLogHandler instance.
+
+        Records sent to its loggers (spinoff(), also from forked worker processes) go through a multiprocessing
+        queue to a listener thread in this process, which writes them out. close() stops that thread after it
+        has written every queued record; it is called when the handler is garbage collected, and for every open
+        handler at interpreter exit (close_all_handlers).
 
         Args:
             name (str): Name for the log file and logger.
@@ -21,7 +33,7 @@ class OxLogHandler:
         file_handler = logging.FileHandler(log_to_dir/f"{name}.log")
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(self.formatter)
-        
+
         # Create optional stream handler if verbose
         self.verbose = verbose
         handlers = [file_handler]
@@ -34,22 +46,39 @@ class OxLogHandler:
         # Initialize the QueueListener with handlers
         self.log_listener = QueueListener(self.log_queue, *handlers, respect_handler_level=True)
         self.log_listener.start()
+        # forked worker processes get copies of this object; only the creating process owns the listener
+        self.owner_pid = os.getpid()
+        self.closed = False
+        open_handlers.add(self)
 
     def set_verbose(self, bIsVerbose: bool=True):
         for handler in self.log_listener.handlers:
             handler.setLevel(logging.INFO if bIsVerbose else logging.WARNING)
 
+    def close(self):
+        """
+        Stop the listener thread once it has written every record already queued, and close the log file.
+        Does nothing if already closed, or when called in a forked copy (a child must not stop the parent's
+        listener, which would happen as the stop sentinel goes through the shared queue).
+        """
+        if getattr(self, "closed", True) or os.getpid() != self.owner_pid:
+            return
+        self.closed = True
+        open_handlers.discard(self)
+        self.log_listener.stop()
+        for handler in self.log_listener.handlers:
+            handler.close()
+
     def __del__(self):
         """
         Destructor to stop the log listener.
         """
-        if hasattr(self, 'log_listener') and self.log_listener:
-            try:
-                self.log_listener.stop()
-            except RuntimeError:
-                # at interpreter shutdown the queue can't start the feeder thread stop() needs; the listener
-                # thread is a daemon and ends with the interpreter anyway
-                pass
+        try:
+            self.close()
+        except RuntimeError:
+            # garbage collected during interpreter shutdown, after close_all_handlers: the queue can no longer
+            # start the feeder thread stop() needs
+            pass
 
     def spinoff(self, name: str) -> logging.Logger:
         """
@@ -70,3 +99,18 @@ class OxLogHandler:
             # overwrite existing handler
             logger.handlers[0] = QueueHandler(self.log_queue)
         return logger
+
+
+def close_all_handlers():
+    """
+    Close every open OxLogHandler. Registered with atexit: without it, listener threads are still blocked on their
+    queues when the interpreter finalizes, the queues are torn down under them, and the threads' errors at
+    shutdown can abort the interpreter (and records still queued are never written). atexit runs handlers in
+    reverse order of registration, so this runs before multiprocessing's own exit handler (registered when
+    multiprocessing.util is imported above) finalizes the queues.
+    """
+    for handler in list(open_handlers):
+        handler.close()
+
+
+atexit.register(close_all_handlers)
