@@ -292,10 +292,8 @@ class FFSShooter(BaseFluxSampler):
         # if sending stuff to an update queue
         if self.update_queue is not None:
             try:
-                # close the writer-side in THIS process (safe; other processes can still use the queue).
-                # deliberately do NOT call cancel_join_thread() here: that skips waiting for the queue's
-                # feeder thread to flush buffered puts to the pipe on process exit, which can silently
-                # drop the last CPY_CONF/shoot_report messages put right before this worker returns.
+                # close this process's copies of the pipe ends (other processes keep using the queue). Every
+                # put() has already been sent: the queue is a SyncQueue, whose put() sends synchronously.
                 self.update_queue.close()
             except Exception as e:
                 plogger.warning(f"Queue cleanup failed: {e}")

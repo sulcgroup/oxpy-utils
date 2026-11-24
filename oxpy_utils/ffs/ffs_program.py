@@ -27,6 +27,7 @@ from .weighted_flux_generator import RestartOnFailFluxGenerator, WeightedSourceF
 from ..defaults.defaults import default_input_exist
 from ..defaults.defaults import get_default_input
 from ..utils.oxlog import OxLogHandler
+from ..utils.sync_queue import SyncQueue
 from ..utils.util import si_units, SI_TIME_UNITS
 
 import hashlib
@@ -64,7 +65,9 @@ class FFSProgram:
     # use directed graph
     process_graph: nx.DiGraph
     # queue to send updates tp graph from processes to program
-    graph_update_queue = multiprocessing.Queue()
+    # written by every worker process: a SyncQueue, so a worker running oxpy (which holds the GIL for a whole
+    # simulation) cannot stall the other workers' graph updates (see utils/sync_queue.py)
+    graph_update_queue = SyncQueue()
 
 
     def __init__(self, name: str,
@@ -344,8 +347,8 @@ class FFSProgram:
         6. "flux_report" - process_idx: int, sim_idx: int, status: bool or "undetermined"
         7. "node_attrs" - process_idx: int, sim_idx: int, step_name: str, attrs: dict (added to an existing node,
            e.g. {"full_success_conf": path} from keep_conf())
-        Best effort: a malformed/out-of-order message (e.g. one dropped by a race between a worker process exiting
-        and its queue feeder thread flushing) is logged and skipped, so it can't stop the rest of the graph.
+        Best effort: a malformed or unresolvable message (e.g. one referring to a node whose own message was lost)
+        is logged and skipped, so it can't stop the rest of the graph.
         """
         cmd_type, *args = cmd
         try:

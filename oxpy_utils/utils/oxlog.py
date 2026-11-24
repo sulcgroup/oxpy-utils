@@ -8,6 +8,8 @@ import weakref
 from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
 
+from .sync_queue import SyncQueue
+
 # every OxLogHandler not yet closed, so they can all be closed at exit
 open_handlers = weakref.WeakSet()
 
@@ -26,7 +28,9 @@ class OxLogHandler:
             name (str): Name for the log file and logger.
             verbose (bool): If True, logs are also printed to the console.
         """
-        self.log_queue = multiprocessing.Queue()
+        # SyncQueue, not multiprocessing.Queue: a worker whose main thread holds the GIL in a long C call
+        # (oxpy running a simulation) must not be able to hold the queue's shared write lock (see sync_queue.py)
+        self.log_queue = SyncQueue()
         self.formatter = logging.Formatter('%(asctime)s [%(levelname)s] (%(name)s) %(message)s')
 
         # Create file handler
@@ -75,9 +79,9 @@ class OxLogHandler:
         """
         try:
             self.close()
-        except RuntimeError:
-            # garbage collected during interpreter shutdown, after close_all_handlers: the queue can no longer
-            # start the feeder thread stop() needs
+        except (RuntimeError, OSError, ValueError):
+            # garbage collected during interpreter shutdown, after close_all_handlers: the queue's pipe or lock
+            # may already be gone, so stop() cannot send its sentinel
             pass
 
     def spinoff(self, name: str) -> logging.Logger:

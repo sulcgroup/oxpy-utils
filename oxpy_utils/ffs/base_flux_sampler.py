@@ -14,6 +14,7 @@ from typing import Union
 from .ffs_interface import FFSInterface
 from ..oxdna_simulation import Simulation, SimulationManager
 from ..utils.oxlog import OxLogHandler
+from ..utils.sync_queue import SyncQueue
 
 success_pattern = './success_*.dat'
 success_regex = re.compile(r'success_(\d+)\.dat$')
@@ -63,7 +64,7 @@ class BaseFluxSampler(ABC):
     # name of default input file (from ipy_oxDNA/defaults/input/) used for ffs process
     default_input_name: str
 
-    update_queue: Union[multiprocessing.Queue, None]
+    update_queue: Union[SyncQueue, None]
 
     seq_dependant: bool
 
